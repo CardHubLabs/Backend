@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: "${DB_URL:jdbc:postgresql://localhost:5432/cardhub}"
+    username: "${DB_USERNAME:cardhub}"
+    password: "${DB_PASSWORD:cardhub}"
+    driver-class-name: org.postgresql.Driver
