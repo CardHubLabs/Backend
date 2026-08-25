@@ -1,0 +1,23 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  task:
+    scheduling:
+      enabled: false
+cardhub:
+  auth:
+    jwt-secret: cardhub-postgres-test-jwt-secret-at-least-32-bytes
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d
+    refresh-cookie-name: cardhub_refresh
+    refresh-cookie-secure: false
+    oauth-success-url: http://localhost:3000/auth/callback
+  cors:
+    allowed-origins: http://localhost:3000
+  security:
+    pii-key: cardhub-postgres-test-pii-key
+    pii-key-version: test-v1

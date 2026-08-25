@@ -3,3 +3,84 @@ spring:
     name: cardhub
   profiles:
     default: local
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  datasource:
+    hikari:
+      connection-timeout: 5000
+      validation-timeout: 2000
+      maximum-pool-size: "${DB_POOL_MAX_SIZE:10}"
+      minimum-idle: "${DB_POOL_MIN_IDLE:2}"
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+server:
+  shutdown: graceful
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  info:
+    env:
+      enabled: true
+info:
+  app:
+    name: CardHub
+    version: "${CARDHUB_VERSION:dev}"
+springdoc:
+  packages-to-scan: com.kant.cardhub
+  paths-to-match: /api/v1/**
+  swagger-ui:
+    csrf:
+      enabled: true
+cardhub:
+  auth:
+    jwt-secret: "${JWT_SECRET:cardhub-local-jwt-secret-must-be-at-least-32-bytes}"
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d
+    refresh-cookie-name: cardhub_refresh
+    refresh-cookie-secure: "${REFRESH_COOKIE_SECURE:false}"
+    oauth-success-url: "${OAUTH_SUCCESS_URL:http://localhost:3000/auth/callback}"
+  cors:
+    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:3000}"
+  security:
+    cipher-provider: "${CIPHER_PROVIDER:aes}"
+    pii-key: "${PII_ENCRYPTION_KEY:cardhub-local-pii-encryption-key-change-me}"
+    pii-key-version: "${PII_KEY_VERSION:local-v1}"
+    kms-key-id: "${KMS_KEY_ID:}"
+    kms-region: "${KMS_REGION:${AWS_REGION:ap-northeast-2}}"
+  storage:
+    provider: "${STORAGE_PROVIDER:local}"
+    bucket: "${S3_BUCKET:}"
+    region: "${AWS_REGION:ap-northeast-2}"
+    cloudfront-base-url: "${CLOUDFRONT_BASE_URL:}"
+  payment:
+    provider: "${PAYMENT_PROVIDER:stub}"
+    base-url: "${TOSS_BASE_URL:https://api.tosspayments.com}"
+    secret-key: "${TOSS_SECRET_KEY:}"
+    connect-timeout: "${TOSS_CONNECT_TIMEOUT:3s}"
+    read-timeout: "${TOSS_READ_TIMEOUT:7s}"
+  shipment:
+    provider: "${SHIPMENT_PROVIDER:stub}"
+    base-url: "${SWEETTRACKER_BASE_URL:https://info.sweettracker.co.kr}"
+    api-key: "${SWEETTRACKER_API_KEY:}"
+    connect-timeout: "${SWEETTRACKER_CONNECT_TIMEOUT:3s}"
+    read-timeout: "${SWEETTRACKER_READ_TIMEOUT:7s}"
+  worker:
+    enabled: "${CARDHUB_WORKER_ENABLED:false}"
+    batch-size: "${CARDHUB_WORKER_BATCH_SIZE:20}"
+    poll-delay: "${CARDHUB_WORKER_POLL_DELAY:1000}"
+    lease-timeout: "${CARDHUB_WORKER_LEASE_TIMEOUT:PT5M}"

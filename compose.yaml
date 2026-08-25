@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cardhub}
+      POSTGRES_USER: ${POSTGRES_USER:-cardhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cardhub}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - cardhub-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cardhub}
+      DB_USERNAME: ${POSTGRES_USER:-cardhub}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-cardhub}
+      JWT_SECRET: ${JWT_SECRET:-local-only-cardhub-jwt-secret-change-before-production}
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-local-only-cardhub-pii-key-change-before-production}
+      CARDHUB_WORKER_ENABLED: "false"
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cardhub}
+      DB_USERNAME: ${POSTGRES_USER:-cardhub}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-cardhub}
+      JWT_SECRET: ${JWT_SECRET:-local-only-cardhub-jwt-secret-change-before-production}
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-local-only-cardhub-pii-key-change-before-production}
+      CARDHUB_WORKER_ENABLED: "true"
+      SPRING_MAIN_WEB_APPLICATION_TYPE: none
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  cardhub-postgres:
