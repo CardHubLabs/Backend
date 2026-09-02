@@ -47,6 +47,19 @@ public class Listing {
     @Column(nullable = false, length = 30)
     private ListingStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false, length = 20)
+    private ListingModerationStatus moderationStatus;
+
+    @Column(name = "blocked_at")
+    private Instant blockedAt;
+
+    @Column(name = "blocked_by")
+    private UUID blockedBy;
+
+    @Column(name = "blocked_reason", length = 500)
+    private String blockedReason;
+
     @Column(name = "reservation_order_id")
     private UUID reservationOrderId;
 
@@ -85,6 +98,7 @@ public class Listing {
         this.price = price;
         this.shippingFee = shippingFee;
         this.status = ListingStatus.ACTIVE;
+        this.moderationStatus = ListingModerationStatus.CLEAR;
         this.createdAt = Objects.requireNonNull(now);
         this.updatedAt = now;
     }
@@ -111,6 +125,10 @@ public class Listing {
     public long getPrice() { return price; }
     public long getShippingFee() { return shippingFee; }
     public ListingStatus getStatus() { return status; }
+    public ListingModerationStatus getModerationStatus() { return moderationStatus; }
+    public Instant getBlockedAt() { return blockedAt; }
+    public UUID getBlockedBy() { return blockedBy; }
+    public String getBlockedReason() { return blockedReason; }
     public UUID getReservationOrderId() { return reservationOrderId; }
     public Instant getReservationExpiresAt() { return reservationExpiresAt; }
     public long getVersion() { return version; }
@@ -122,7 +140,11 @@ public class Listing {
     }
 
     public boolean isReservable() {
-        return status == ListingStatus.ACTIVE;
+        return status == ListingStatus.ACTIVE && moderationStatus == ListingModerationStatus.CLEAR;
+    }
+
+    public boolean isBlocked() {
+        return moderationStatus == ListingModerationStatus.BLOCKED;
     }
 
     public void update(
@@ -134,6 +156,7 @@ public class Listing {
             Instant now
     ) {
         requireOwner(requesterId);
+        requireNotBlocked();
         if (status != ListingStatus.ACTIVE && status != ListingStatus.HIDDEN) throw invalidState();
         validateMoney(price, shippingFee);
         this.cardCondition = Objects.requireNonNull(condition);
@@ -145,6 +168,7 @@ public class Listing {
 
     public void hide(UUID requesterId, Instant now) {
         requireOwner(requesterId);
+        requireNotBlocked();
         if (status != ListingStatus.ACTIVE) throw invalidState();
         this.status = ListingStatus.HIDDEN;
         this.updatedAt = now;
@@ -152,6 +176,7 @@ public class Listing {
 
     public void activate(UUID requesterId, Instant now) {
         requireOwner(requesterId);
+        requireNotBlocked();
         if (status != ListingStatus.HIDDEN) throw invalidState();
         this.status = ListingStatus.ACTIVE;
         this.updatedAt = now;
@@ -159,19 +184,39 @@ public class Listing {
 
     public void delete(UUID requesterId, Instant now) {
         requireOwner(requesterId);
+        requireNotBlocked();
         if (status != ListingStatus.ACTIVE && status != ListingStatus.HIDDEN) throw invalidState();
         this.status = ListingStatus.DELETED;
         this.updatedAt = now;
     }
 
-    public void adminHide(Instant now) {
-        if (status != ListingStatus.ACTIVE) throw invalidState();
-        this.status = ListingStatus.HIDDEN;
+    public void block(UUID adminId, String reason, Instant now) {
+        if (isBlocked() || status == ListingStatus.DELETED) throw invalidState();
+        UUID normalizedAdminId = Objects.requireNonNull(adminId);
+        Instant blockedAt = Objects.requireNonNull(now);
+        String normalizedReason = normalizeBlockReason(reason);
+        this.moderationStatus = ListingModerationStatus.BLOCKED;
+        this.blockedAt = blockedAt;
+        this.blockedBy = normalizedAdminId;
+        this.blockedReason = normalizedReason;
+        if (status == ListingStatus.ACTIVE) {
+            this.status = ListingStatus.HIDDEN;
+        }
         this.updatedAt = now;
     }
 
+    public void unblock(Instant now) {
+        if (!isBlocked()) throw invalidState();
+        Instant unblockedAt = Objects.requireNonNull(now);
+        this.moderationStatus = ListingModerationStatus.CLEAR;
+        this.blockedAt = null;
+        this.blockedBy = null;
+        this.blockedReason = null;
+        this.updatedAt = unblockedAt;
+    }
+
     public void reserve(UUID orderId, Instant expiresAt, Instant now) {
-        if (status != ListingStatus.ACTIVE) throw new BusinessException(ErrorCode.LISTING_ALREADY_RESERVED);
+        if (!isReservable()) throw new BusinessException(ErrorCode.LISTING_ALREADY_RESERVED);
         this.status = ListingStatus.RESERVED;
         this.reservationOrderId = Objects.requireNonNull(orderId);
         this.reservationExpiresAt = Objects.requireNonNull(expiresAt);
@@ -180,7 +225,7 @@ public class Listing {
 
     public void releaseReservation(UUID orderId, Instant now) {
         if (status != ListingStatus.RESERVED || !Objects.equals(reservationOrderId, orderId)) throw invalidState();
-        this.status = ListingStatus.ACTIVE;
+        this.status = isBlocked() ? ListingStatus.HIDDEN : ListingStatus.ACTIVE;
         this.reservationOrderId = null;
         this.reservationExpiresAt = null;
         this.updatedAt = now;
@@ -198,6 +243,10 @@ public class Listing {
         if (!sellerId.equals(requesterId)) throw new BusinessException(ErrorCode.FORBIDDEN);
     }
 
+    private void requireNotBlocked() {
+        if (isBlocked()) throw invalidState();
+    }
+
     private static void validateMoney(long price, long shippingFee) {
         if (price < MIN_PRICE || price > MAX_PRICE || shippingFee < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "가격 또는 배송비가 허용 범위를 벗어났습니다.");
@@ -209,6 +258,17 @@ public class Listing {
         String normalized = value.trim();
         if (normalized.length() > 2_000) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "매물 설명은 2,000자 이하여야 합니다.");
+        }
+        return normalized;
+    }
+
+    private static String normalizeBlockReason(String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "차단 사유가 필요합니다.");
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 500) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "차단 사유는 500자 이하여야 합니다.");
         }
         return normalized;
     }

@@ -4,8 +4,11 @@ import com.kant.cardhub.common.security.SensitiveDataCipher;
 import com.kant.cardhub.order.application.port.AcceptedOfferPort;
 import com.kant.cardhub.order.application.port.ListingReservationPort;
 import com.kant.cardhub.order.application.port.ListingSnapshot;
+import com.kant.cardhub.order.application.port.PurchasedCartCleanupPort;
+import com.kant.cardhub.order.application.port.OrderDeliveryProjectionPort;
 import com.kant.cardhub.order.domain.Order;
 import com.kant.cardhub.order.domain.OrderItemDraft;
+import com.kant.cardhub.order.domain.ShippingAddressSnapshot;
 import com.kant.cardhub.order.infrastructure.OrderRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,9 @@ public class OrderApplicationService {
     private final ListingReservationPort listingReservationPort;
     private final SensitiveDataCipher sensitiveDataCipher;
     private final AcceptedOfferPort acceptedOfferPort;
+    private final PurchasedCartCleanupPort purchasedCartCleanupPort;
+    private final ShippingAddressCodec shippingAddressCodec;
+    private final OrderDeliveryProjectionPort orderDeliveryProjectionPort;
     private final Clock clock;
 
     public OrderApplicationService(
@@ -31,18 +37,34 @@ public class OrderApplicationService {
             ListingReservationPort listingReservationPort,
             SensitiveDataCipher sensitiveDataCipher,
             AcceptedOfferPort acceptedOfferPort,
+            PurchasedCartCleanupPort purchasedCartCleanupPort,
+            ShippingAddressCodec shippingAddressCodec,
+            OrderDeliveryProjectionPort orderDeliveryProjectionPort,
             Clock clock
     ) {
         this.orderRepository = orderRepository;
         this.listingReservationPort = listingReservationPort;
         this.sensitiveDataCipher = sensitiveDataCipher;
         this.acceptedOfferPort = acceptedOfferPort;
+        this.purchasedCartCleanupPort = purchasedCartCleanupPort;
+        this.shippingAddressCodec = shippingAddressCodec;
+        this.orderDeliveryProjectionPort = orderDeliveryProjectionPort;
         this.clock = clock;
     }
 
     @Transactional
     public Order create(UUID buyerId, List<UUID> requestedListingIds, String shippingAddress) {
-        return createInternal(buyerId, requestedListingIds, shippingAddress, null);
+        return createInternal(buyerId, requestedListingIds, requireLegacyAddress(shippingAddress), (short) 1, null);
+    }
+
+    @Transactional
+    public Order create(
+            UUID buyerId,
+            List<UUID> requestedListingIds,
+            ShippingAddressSnapshot shippingAddress
+    ) {
+        return createInternal(
+                buyerId, requestedListingIds, shippingAddressCodec.encode(shippingAddress), (short) 2, null);
     }
 
     @Transactional
@@ -52,13 +74,26 @@ public class OrderApplicationService {
             UUID acceptedOfferId,
             String shippingAddress
     ) {
-        return createInternal(buyerId, List.of(listingId), shippingAddress, acceptedOfferId);
+        return createInternal(
+                buyerId, List.of(listingId), requireLegacyAddress(shippingAddress), (short) 1, acceptedOfferId);
+    }
+
+    @Transactional
+    public Order createSingle(
+            UUID buyerId,
+            UUID listingId,
+            UUID acceptedOfferId,
+            ShippingAddressSnapshot shippingAddress
+    ) {
+        return createInternal(
+                buyerId, List.of(listingId), shippingAddressCodec.encode(shippingAddress), (short) 2, acceptedOfferId);
     }
 
     private Order createInternal(
             UUID buyerId,
             List<UUID> requestedListingIds,
-            String shippingAddress,
+            String serializedShippingAddress,
+            short shippingAddressSchemaVersion,
             UUID acceptedOfferId
     ) {
         List<UUID> listingIds = normalizeListingIds(requestedListingIds);
@@ -67,7 +102,7 @@ public class OrderApplicationService {
         if (listings.stream().anyMatch(listing -> !sellerId.equals(listing.sellerId()))) {
             throw new IllegalArgumentException("A grouped order may contain listings from only one seller");
         }
-        SensitiveDataCipher.EncryptedValue address = sensitiveDataCipher.encrypt(shippingAddress);
+        SensitiveDataCipher.EncryptedValue address = sensitiveDataCipher.encrypt(serializedShippingAddress);
         Instant now = clock.instant();
         Long acceptedPrice = acceptedOfferId == null
                 ? null
@@ -76,12 +111,17 @@ public class OrderApplicationService {
                 .map(listing -> new OrderItemDraft(
                         listing.id(), listing.cardVariantId(), listing.title(),
                         acceptedPrice == null ? listing.price() : acceptedPrice,
-                        listing.shippingFee()))
+                        listing.shippingFee(),
+                        acceptedOfferId,
+                        listing.cardCondition(),
+                        listing.primaryImageStorageKey()))
                 .toList();
         Order order = Order.create(
-                buyerId, sellerId, drafts, address.ciphertext(), address.keyVersion(), now);
+                buyerId, sellerId, drafts, address.ciphertext(), address.keyVersion(),
+                shippingAddressSchemaVersion, now);
         orderRepository.saveAndFlush(order);
         listingReservationPort.reserveAll(listingIds, order.getId(), order.getReservationExpiresAt());
+        purchasedCartCleanupPort.removePurchasedListings(buyerId, listingIds);
         return order;
     }
 
@@ -102,14 +142,22 @@ public class OrderApplicationService {
         boolean sellerAfterPayment = order.getSellerId().equals(actorId)
                 && order.getStatus() != com.kant.cardhub.order.domain.OrderStatus.PAYMENT_PENDING
                 && order.getStatus() != com.kant.cardhub.order.domain.OrderStatus.CANCELLED;
-        String shippingAddress = null;
+        String legacyShippingAddress = null;
+        ShippingAddressSnapshot shippingAddress = null;
         if (buyer || sellerAfterPayment) {
-            shippingAddress = sensitiveDataCipher.decrypt(new SensitiveDataCipher.EncryptedValue(
+            String plaintext = sensitiveDataCipher.decrypt(new SensitiveDataCipher.EncryptedValue(
                     order.getShippingAddressCiphertext(),
                     order.getShippingAddressKeyVersion()
             ));
+            if (order.getShippingAddressSchemaVersion() == 2) {
+                shippingAddress = shippingAddressCodec.decode(plaintext);
+            } else {
+                legacyShippingAddress = plaintext;
+            }
         }
-        return new OrderDetail(order, shippingAddress);
+        return new OrderDetail(
+                order, legacyShippingAddress, shippingAddress,
+                orderDeliveryProjectionPort.findByOrderId(orderId).orElse(null));
     }
 
     @Transactional
@@ -154,6 +202,18 @@ public class OrderApplicationService {
         return order.getItems().stream().map(item -> item.getListingId()).toList();
     }
 
-    public record OrderDetail(Order order, String shippingAddress) {
+    private static String requireLegacyAddress(String value) {
+        if (value == null || value.isBlank() || value.length() > 2000) {
+            throw new IllegalArgumentException("shippingAddress is required and must be at most 2000 characters");
+        }
+        return value.trim();
+    }
+
+    public record OrderDetail(
+            Order order,
+            String legacyShippingAddress,
+            ShippingAddressSnapshot shippingAddress,
+            OrderDeliveryProjectionPort.DeliveryProjection deliveryProjection
+    ) {
     }
 }

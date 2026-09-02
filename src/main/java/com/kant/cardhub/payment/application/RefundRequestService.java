@@ -60,4 +60,13 @@ public class RefundRequestService {
         return refundRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Refund not found for order: " + orderId));
     }
+
+    @Transactional(readOnly = true)
+    public Refund findForBuyer(UUID buyerId, UUID orderId) {
+        Refund refund = findForOrder(orderId);
+        if (!refund.getBuyerId().equals(buyerId)) {
+            throw new SecurityException("Only the buyer may view refund status");
+        }
+        return refund;
+    }
 }

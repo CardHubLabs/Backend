@@ -1,5 +1,9 @@
 # CardHub 백엔드 개발 기록 및 잔여 백로그 — 2026-08-25
 
+> 이 문서는 2026-08-25 시점의 역사 기록입니다. V016~V023 보완 및 최신 테스트
+> 결과는 [development-status-2026-09-02.md](development-status-2026-09-02.md)를
+> 기준으로 확인하세요.
+
 - 기준 문서: [CardHub MVP Implementation Roadmap](https://app.notion.com/p/3c4784ed5731804ebabac9a41bbf1f87?pvs=204)
 - Notion 진행 기록: [2026-08-25 개발 기록 및 잔여 백로그](https://app.notion.com/p/3c6784ed5731811aa89df20eddc35016?pvs=204)
 - 대상: `cardhub` Spring Boot 백엔드 저장소
@@ -342,4 +346,3 @@ curl -i http://localhost:8080/api/v1/users/me
 - [ ] 핵심 domain/application branch coverage 85%
 - [ ] P0 acceptance scenario 전체 통과
 - [ ] Staging 배포·backup·rollback 검증
-

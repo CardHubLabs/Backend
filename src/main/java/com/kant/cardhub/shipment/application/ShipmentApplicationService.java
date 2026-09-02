@@ -25,6 +25,7 @@ public class ShipmentApplicationService {
     private final ShipmentRepository shipmentRepository;
     private final ShipmentEventRepository eventRepository;
     private final CommerceEventPublisher eventPublisher;
+    private final ShippingCarrierService carrierService;
     private final Clock clock;
 
     public ShipmentApplicationService(
@@ -32,17 +33,20 @@ public class ShipmentApplicationService {
             ShipmentRepository shipmentRepository,
             ShipmentEventRepository eventRepository,
             CommerceEventPublisher eventPublisher,
+            ShippingCarrierService carrierService,
             Clock clock
     ) {
         this.orderRepository = orderRepository;
         this.shipmentRepository = shipmentRepository;
         this.eventRepository = eventRepository;
         this.eventPublisher = eventPublisher;
+        this.carrierService = carrierService;
         this.clock = clock;
     }
 
     @Transactional
     public Shipment register(UUID sellerId, UUID orderId, String carrierCode, String trackingNumber) {
+        String activeCarrierCode = carrierService.requireActiveCode(carrierCode);
         if (shipmentRepository.findByOrderId(orderId).isPresent()) {
             throw new IllegalStateException("Shipment is already registered");
         }
@@ -50,7 +54,7 @@ public class ShipmentApplicationService {
         Instant now = clock.instant();
         order.markShipped(sellerId, now);
         Shipment shipment = shipmentRepository.save(
-                Shipment.register(orderId, sellerId, carrierCode, trackingNumber, now));
+                Shipment.register(orderId, sellerId, activeCarrierCode, trackingNumber, now));
         eventRepository.save(ShipmentEvent.create(
                 shipment.getId(), "registered:" + shipment.getId(), ShipmentStatus.READY,
                 "Shipment registered", now, now));
@@ -61,10 +65,11 @@ public class ShipmentApplicationService {
 
     @Transactional
     public Shipment update(UUID sellerId, UUID orderId, String carrierCode, String trackingNumber) {
+        String activeCarrierCode = carrierService.requireActiveCode(carrierCode);
         lockOrder(orderId);
         Shipment shipment = shipmentRepository.findByOrderIdForUpdate(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Shipment not found for order: " + orderId));
-        shipment.updateTracking(sellerId, carrierCode, trackingNumber, clock.instant());
+        shipment.updateTracking(sellerId, activeCarrierCode, trackingNumber, clock.instant());
         return shipment;
     }
 

@@ -22,8 +22,20 @@ public class MarketPriceStat {
     @Column(name = "average_7d")
     private Long average7d;
 
+    @Column(name = "median_7d")
+    private Long median7d;
+
+    @Column(name = "average_30d")
+    private Long average30d;
+
     @Column(name = "median_30d")
     private Long median30d;
+
+    @Column(name = "average_90d")
+    private Long average90d;
+
+    @Column(name = "median_90d")
+    private Long median90d;
 
     @Column(name = "active_lowest_price")
     private Long activeLowestPrice;
@@ -45,10 +57,25 @@ public class MarketPriceStat {
         return stat;
     }
 
-    public void refresh(Long recent, Long average7d, Long median30d, Long activeLowest, long volume30d, Instant now) {
+    public void refresh(
+            Long recent,
+            Long average7d,
+            Long median7d,
+            Long average30d,
+            Long median30d,
+            Long average90d,
+            Long median90d,
+            Long activeLowest,
+            long volume30d,
+            Instant now
+    ) {
         this.recentPrice = recent;
         this.average7d = average7d;
+        this.median7d = median7d;
+        this.average30d = average30d;
         this.median30d = median30d;
+        this.average90d = average90d;
+        this.median90d = median90d;
         this.activeLowestPrice = activeLowest;
         this.volume30d = volume30d;
         this.calculatedAt = now;
@@ -57,7 +84,11 @@ public class MarketPriceStat {
     public UUID getCardVariantId() { return cardVariantId; }
     public Long getRecentPrice() { return recentPrice; }
     public Long getAverage7d() { return average7d; }
+    public Long getMedian7d() { return median7d; }
+    public Long getAverage30d() { return average30d; }
     public Long getMedian30d() { return median30d; }
+    public Long getAverage90d() { return average90d; }
+    public Long getMedian90d() { return median90d; }
     public Long getActiveLowestPrice() { return activeLowestPrice; }
     public long getVolume30d() { return volume30d; }
     public Instant getCalculatedAt() { return calculatedAt; }

@@ -7,8 +7,21 @@ public record OrderItemDraft(
         UUID cardVariantId,
         String listingTitle,
         long price,
-        long shippingFee
+        long shippingFee,
+        UUID sourceOfferId,
+        String cardConditionSnapshot,
+        String primaryImageStorageKey
 ) {
+    public OrderItemDraft(
+            UUID listingId,
+            UUID cardVariantId,
+            String listingTitle,
+            long price,
+            long shippingFee
+    ) {
+        this(listingId, cardVariantId, listingTitle, price, shippingFee, null, "MINT", null);
+    }
+
     public OrderItemDraft {
         if (listingId == null || cardVariantId == null) {
             throw new IllegalArgumentException("listingId and cardVariantId are required");
@@ -17,5 +30,8 @@ public record OrderItemDraft(
             throw new IllegalArgumentException("price and shippingFee must not be negative");
         }
         listingTitle = listingTitle == null ? "" : listingTitle;
+        if (cardConditionSnapshot == null || cardConditionSnapshot.isBlank()) {
+            throw new IllegalArgumentException("cardConditionSnapshot is required");
+        }
     }
 }

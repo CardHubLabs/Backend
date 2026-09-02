@@ -18,11 +18,15 @@ public interface PriceAlertRepository extends JpaRepository<PriceAlert, UUID> {
 
     boolean existsByUserIdAndListingIdAndActiveTrue(UUID userId, UUID listingId);
 
+    boolean existsByUserIdAndCardVariantIdAndActiveTrue(UUID userId, UUID cardVariantId);
+
     Optional<PriceAlert> findByIdAndUserId(UUID id, UUID userId);
 
     Page<PriceAlert> findAllByUserId(UUID userId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<PriceAlert> findAllByListingIdAndActiveTrueOrderByCreatedAtAsc(UUID listingId);
-}
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<PriceAlert> findAllByCardVariantIdAndActiveTrueOrderByCreatedAtAsc(UUID cardVariantId);
+}

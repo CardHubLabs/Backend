@@ -1,10 +1,12 @@
 package com.kant.cardhub.admin.application;
 
+import com.kant.cardhub.cart.infrastructure.CartItemRepository;
 import com.kant.cardhub.common.error.BusinessException;
 import com.kant.cardhub.common.error.ErrorCode;
 import com.kant.cardhub.listing.domain.Listing;
 import com.kant.cardhub.listing.infrastructure.ListingRepository;
 import com.kant.cardhub.market.application.MarketApplicationService;
+import com.kant.cardhub.offer.application.OfferService;
 import com.kant.cardhub.order.domain.Order;
 import com.kant.cardhub.order.infrastructure.OrderRepository;
 import com.kant.cardhub.payment.application.RefundProcessingService;
@@ -13,6 +15,8 @@ import com.kant.cardhub.payment.domain.Refund;
 import com.kant.cardhub.payment.domain.RefundStatus;
 import com.kant.cardhub.payment.infrastructure.PaymentRepository;
 import com.kant.cardhub.payment.infrastructure.RefundRepository;
+import com.kant.cardhub.payment.application.PaymentReconcileJobHandler;
+import com.kant.cardhub.worker.application.ScheduledJobService;
 import com.kant.cardhub.user.domain.User;
 import com.kant.cardhub.user.domain.UserRole;
 import com.kant.cardhub.user.domain.UserStatus;
@@ -41,8 +45,11 @@ public class AdminService {
 
     private final UserRepository userRepository;
     private final ListingRepository listingRepository;
+    private final CartItemRepository cartItemRepository;
+    private final OfferService offerService;
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
+    private final ScheduledJobService scheduledJobService;
     private final RefundRepository refundRepository;
     private final RefundProcessingService refundProcessingService;
     private final TradeRepository tradeRepository;
@@ -55,8 +62,11 @@ public class AdminService {
     public AdminService(
             UserRepository userRepository,
             ListingRepository listingRepository,
+            CartItemRepository cartItemRepository,
+            OfferService offerService,
             OrderRepository orderRepository,
             PaymentRepository paymentRepository,
+            ScheduledJobService scheduledJobService,
             RefundRepository refundRepository,
             RefundProcessingService refundProcessingService,
             TradeRepository tradeRepository,
@@ -68,8 +78,11 @@ public class AdminService {
     ) {
         this.userRepository = userRepository;
         this.listingRepository = listingRepository;
+        this.cartItemRepository = cartItemRepository;
+        this.offerService = offerService;
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
+        this.scheduledJobService = scheduledJobService;
         this.refundRepository = refundRepository;
         this.refundProcessingService = refundProcessingService;
         this.tradeRepository = tradeRepository;
@@ -104,10 +117,28 @@ public class AdminService {
 
     @Transactional
     public void hideListing(UUID adminId, UUID listingId) {
-        Listing listing = listingRepository.findById(listingId)
+        blockListing(adminId, listingId, "Legacy admin hide endpoint");
+    }
+
+    @Transactional
+    public void blockListing(UUID adminId, UUID listingId, String reason) {
+        Listing listing = listingRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
-        listing.adminHide(Instant.now(clock));
-        log(adminId, "LISTING_HIDE", listingId);
+        listing.block(adminId, reason, Instant.now(clock));
+        cartItemRepository.deleteAllByListingId(listingId);
+        int expiredOffers = offerService.expireForBlockedListing(listingId, adminId);
+        audit.info(
+                "actorId={} action=LISTING_BLOCK targetId={} expiredOffers={}",
+                adminId, listingId, expiredOffers
+        );
+    }
+
+    @Transactional
+    public void unblockListing(UUID adminId, UUID listingId) {
+        Listing listing = listingRepository.findByIdForUpdate(listingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+        listing.unblock(Instant.now(clock));
+        log(adminId, "LISTING_UNBLOCK", listingId);
     }
 
     public RefundStatus approveRefund(UUID adminId, UUID refundId) {
@@ -165,6 +196,30 @@ public class AdminService {
     @Transactional(readOnly = true)
     public Page<Payment> payments(int page, int size) {
         return paymentRepository.findAll(pageable(page, size));
+    }
+
+    @Transactional(readOnly = true)
+    public Payment payment(UUID paymentId) {
+        return paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "결제를 찾을 수 없습니다."));
+    }
+
+    @Transactional
+    public UUID enqueuePaymentReconcile(UUID adminId, UUID paymentId) {
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "결제를 찾을 수 없습니다."));
+        payment.queueManualReconcile(Instant.now(clock));
+        String dedupeKey = "ADMIN_PAYMENT_RECONCILE:" + paymentId + ":" + (payment.getConfirmAttemptCount() + 1);
+        UUID jobId = scheduledJobService.enqueue(
+                        PaymentReconcileJobHandler.JOB_TYPE,
+                        paymentId.toString(),
+                        dedupeKey,
+                        Instant.now(clock),
+                        10
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.CONFLICT, "이미 같은 결제 복구 작업이 등록됐습니다."));
+        audit.info("actorId={} action=PAYMENT_RECONCILE_ENQUEUE targetId={} jobId={}", adminId, paymentId, jobId);
+        return jobId;
     }
 
     @Transactional(readOnly = true)

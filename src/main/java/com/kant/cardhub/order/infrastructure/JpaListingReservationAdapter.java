@@ -65,7 +65,14 @@ public class JpaListingReservationAdapter implements ListingReservationPort {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = entityManager.createNativeQuery("""
                         select l.id, l.seller_id, l.card_variant_id,
-                               c.name, l.price, l.shipping_fee, l.status
+                               c.name, l.price, l.shipping_fee, l.status,
+                               l.card_condition,
+                               (select li.storage_key
+                                  from listing_images li
+                                 where li.listing_id = l.id
+                                 order by li.sort_order, li.id
+                                 limit 1) as primary_image_storage_key,
+                               l.moderation_status
                           from listings l
                           join card_variants cv on cv.id = l.card_variant_id
                           join cards c on c.id = cv.card_id
@@ -80,7 +87,8 @@ public class JpaListingReservationAdapter implements ListingReservationPort {
         for (Object[] row : rows) {
             UUID id = (UUID) row[0];
             String status = String.valueOf(row[6]);
-            if (!"ACTIVE".equals(status)) {
+            String moderationStatus = String.valueOf(row[9]);
+            if (!"ACTIVE".equals(status) || !"CLEAR".equals(moderationStatus)) {
                 throw new IllegalStateException("Listing " + id + " is not available");
             }
             byId.put(id, new ListingSnapshot(
@@ -89,7 +97,9 @@ public class JpaListingReservationAdapter implements ListingReservationPort {
                     (UUID) row[2],
                     String.valueOf(row[3]),
                     ((Number) row[4]).longValue(),
-                    ((Number) row[5]).longValue()
+                    ((Number) row[5]).longValue(),
+                    String.valueOf(row[7]),
+                    row[8] == null ? null : String.valueOf(row[8])
             ));
         }
         if (byId.size() != listingIds.size()) {
@@ -107,6 +117,7 @@ public class JpaListingReservationAdapter implements ListingReservationPort {
                            set status = 'RESERVED', reservation_order_id = :orderId,
                                reservation_expires_at = :expiresAt, version = version + 1
                          where id in (:listingIds) and status = 'ACTIVE'
+                           and moderation_status = 'CLEAR'
                         """)
                 .setParameter("orderId", orderId)
                 .setParameter("expiresAt", expiresAt)
@@ -121,7 +132,8 @@ public class JpaListingReservationAdapter implements ListingReservationPort {
     public void releaseOwned(List<UUID> listingIds, UUID orderId) {
         entityManager.createNativeQuery("""
                         update listings
-                           set status = 'ACTIVE', reservation_order_id = null,
+                           set status = CASE WHEN moderation_status = 'BLOCKED' THEN 'HIDDEN' ELSE 'ACTIVE' END,
+                               reservation_order_id = null,
                                reservation_expires_at = null, version = version + 1
                          where id in (:listingIds) and status = 'RESERVED'
                            and reservation_order_id = :orderId
@@ -152,7 +164,8 @@ public class JpaListingReservationAdapter implements ListingReservationPort {
     public void reactivateSold(List<UUID> listingIds) {
         entityManager.createNativeQuery("""
                         update listings
-                           set status = 'ACTIVE', reservation_order_id = null,
+                           set status = CASE WHEN moderation_status = 'BLOCKED' THEN 'HIDDEN' ELSE 'ACTIVE' END,
+                               reservation_order_id = null,
                                reservation_expires_at = null, version = version + 1
                          where id in (:listingIds) and status = 'SOLD'
                         """)

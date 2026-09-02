@@ -7,5 +7,8 @@ import java.util.UUID;
 public interface ListingPriceReader {
 
     OptionalLong currentActivePrice(UUID listingId);
-}
 
+    OptionalLong currentActiveLowestPrice(UUID cardVariantId);
+
+    java.util.Optional<UUID> activeListingVariant(UUID listingId);
+}

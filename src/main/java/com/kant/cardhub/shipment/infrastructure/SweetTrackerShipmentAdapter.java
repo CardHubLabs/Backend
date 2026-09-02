@@ -1,6 +1,8 @@
 package com.kant.cardhub.shipment.infrastructure;
 
 import com.kant.cardhub.shipment.application.port.ShipmentTrackingPort;
+import com.kant.cardhub.shipment.application.port.ShippingCarrierCatalogPort;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.kant.cardhub.shipment.domain.ShipmentStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -22,7 +24,7 @@ import java.util.Comparator;
 
 @Component
 @ConditionalOnProperty(name = "cardhub.shipment.provider", havingValue = "sweettracker")
-public class SweetTrackerShipmentAdapter implements ShipmentTrackingPort {
+public class SweetTrackerShipmentAdapter implements ShipmentTrackingPort, ShippingCarrierCatalogPort {
 
     private static final ZoneId KOREA = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter EVENT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -85,6 +87,30 @@ public class SweetTrackerShipmentAdapter implements ShipmentTrackingPort {
                 + eventAt + '|' + description);
         return new TrackingResult(
                 carrierCode, trackingNumber, status, eventKey, description, eventAt);
+    }
+
+    @Override
+    public String provider() {
+        return "sweettracker";
+    }
+
+    @Override
+    public List<Carrier> fetchCarriers() {
+        CompanyListResponse response = restClient.get()
+                .uri(uri -> uri.path("/api/v1/companylist")
+                        .queryParam("t_key", apiKey)
+                        .build())
+                .retrieve()
+                .body(CompanyListResponse.class);
+        if (response == null || response.companies() == null || response.companies().isEmpty()) {
+            throw new IllegalStateException("SweetTracker returned an empty carrier catalogue");
+        }
+        return response.companies().stream()
+                .filter(company -> company.code() != null && !company.code().isBlank())
+                .filter(company -> company.name() != null && !company.name().isBlank())
+                .map(company -> new Carrier(company.code().trim(), company.name().trim()))
+                .sorted(Comparator.comparing(Carrier::displayName).thenComparing(Carrier::code))
+                .toList();
     }
 
     private ShipmentStatus normalizeStatus(String complete, int level, TrackingDetail latest) {
@@ -169,6 +195,17 @@ public class SweetTrackerShipmentAdapter implements ShipmentTrackingPort {
             String where,
             String kind,
             Integer level
+    ) {
+    }
+
+    private record CompanyListResponse(
+            @JsonProperty("Company") List<CompanyInfo> companies
+    ) {
+    }
+
+    private record CompanyInfo(
+            @JsonProperty("Code") String code,
+            @JsonProperty("Name") String name
     ) {
     }
 }

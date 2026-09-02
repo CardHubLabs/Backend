@@ -1,6 +1,7 @@
 package com.kant.cardhub.listing.application;
 
 import com.kant.cardhub.listing.domain.CardCondition;
+import com.kant.cardhub.listing.domain.ListingModerationStatus;
 import com.kant.cardhub.listing.domain.ListingStatus;
 
 import java.time.Instant;
@@ -21,6 +22,9 @@ public final class ListingView {
             long price,
             long shippingFee,
             ListingStatus status,
+            ListingModerationStatus moderationStatus,
+            Instant blockedAt,
+            String blockedReason,
             String primaryImageUrl,
             Instant createdAt
     ) {}
@@ -34,6 +38,9 @@ public final class ListingView {
             long price,
             long shippingFee,
             ListingStatus status,
+            ListingModerationStatus moderationStatus,
+            Instant blockedAt,
+            String blockedReason,
             List<Image> images,
             Instant createdAt,
             Instant updatedAt

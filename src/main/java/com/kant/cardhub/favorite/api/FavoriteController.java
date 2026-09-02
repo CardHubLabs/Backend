@@ -38,12 +38,30 @@ public class FavoriteController {
         return ApiResponse.success(FavoriteResponse.from(favoriteService.add(userId, listingId)));
     }
 
+    @PostMapping("/card-variants/{variantId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<FavoriteResponse> addVariant(
+            @CurrentUserId UUID userId,
+            @PathVariable UUID variantId
+    ) {
+        return ApiResponse.success(FavoriteResponse.from(favoriteService.addVariant(userId, variantId)));
+    }
+
     @DeleteMapping("/{listingId}")
     public ApiResponse<Void> remove(
             @CurrentUserId UUID userId,
             @PathVariable UUID listingId
     ) {
         favoriteService.remove(userId, listingId);
+        return ApiResponse.empty();
+    }
+
+    @DeleteMapping("/card-variants/{variantId}")
+    public ApiResponse<Void> removeVariant(
+            @CurrentUserId UUID userId,
+            @PathVariable UUID variantId
+    ) {
+        favoriteService.removeVariant(userId, variantId);
         return ApiResponse.empty();
     }
 
@@ -57,9 +75,11 @@ public class FavoriteController {
         return ApiResponse.success(FavoritePageResponse.from(result));
     }
 
-    public record FavoriteResponse(UUID id, UUID listingId, Instant createdAt) {
+    public record FavoriteResponse(UUID id, UUID cardVariantId, UUID listingId, Instant createdAt) {
         static FavoriteResponse from(Favorite favorite) {
-            return new FavoriteResponse(favorite.getId(), favorite.getListingId(), favorite.getCreatedAt());
+            return new FavoriteResponse(
+                    favorite.getId(), favorite.getCardVariantId(),
+                    favorite.getListingId(), favorite.getCreatedAt());
         }
     }
 

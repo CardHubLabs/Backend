@@ -60,6 +60,14 @@ public class CardSet {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
+    public void update(UUID gameId, String name, String code, LocalDate releasedAt, Instant now) {
+        this.gameId = Objects.requireNonNull(gameId);
+        this.name = requireText(name, "name");
+        this.code = requireText(code, "code");
+        this.releasedAt = releasedAt;
+        this.updatedAt = Objects.requireNonNull(now);
+    }
+
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(field + " must not be blank");
         return value.trim();

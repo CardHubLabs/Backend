@@ -22,10 +22,21 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     @Query("select p from Payment p where p.id = :id")
     Optional<Payment> findByIdForUpdate(@Param("id") UUID id);
 
-    @Query("select p.id from Payment p where p.status = :unknown or (p.status = :confirming and p.createdAt <= :staleBefore) order by p.lastReconciledAt nulls first, p.createdAt")
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.idempotencyKey = :idempotencyKey")
+    Optional<Payment> findByIdempotencyKeyForUpdate(@Param("idempotencyKey") String idempotencyKey);
+
+    @Query("""
+            select p.id from Payment p
+             where p.manualReviewRequired = false
+               and ((p.status = :unknown and (p.nextReconcileAt is null or p.nextReconcileAt <= :now))
+                    or (p.status = :confirming and p.lastConfirmAttemptAt <= :staleBefore))
+             order by p.nextReconcileAt nulls first, p.lastReconciledAt nulls first, p.createdAt
+            """)
     List<UUID> findRecoverableIds(
             @Param("unknown") PaymentStatus unknown,
             @Param("confirming") PaymentStatus confirming,
+            @Param("now") java.time.Instant now,
             @Param("staleBefore") java.time.Instant staleBefore,
             Pageable pageable);
 }

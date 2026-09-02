@@ -9,6 +9,7 @@ import com.kant.cardhub.order.domain.Order;
 import com.kant.cardhub.order.infrastructure.OrderRepository;
 import com.kant.cardhub.payment.application.port.PaymentGateway;
 import com.kant.cardhub.payment.domain.Payment;
+import com.kant.cardhub.payment.domain.PaymentMethod;
 import com.kant.cardhub.payment.infrastructure.PaymentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -53,8 +54,25 @@ public class PaymentFinalizationService {
         Instant now = clock.instant();
         switch (gatewayResult.status()) {
             case APPROVED -> {
+                PaymentMethod providerMethod = PaymentMethod.fromProvider(gatewayResult.method());
+                boolean invalidProviderIdentity = gatewayResult.identityValidationRequired()
+                        && (!payment.providerIdentityMatches(
+                        gatewayResult.paymentKey(), gatewayResult.orderId(), gatewayResult.totalAmount())
+                        || providerMethod == null
+                        || (providerMethod == PaymentMethod.EASY_PAY
+                        && (gatewayResult.easyPayProvider() == null
+                        || gatewayResult.easyPayProvider().isBlank())));
+                if (invalidProviderIdentity) {
+                    payment.unknown(
+                            "PROVIDER_IDENTITY_MISMATCH", gatewayResult.providerStatus(),
+                            gatewayResult.method(), gatewayResult.easyPayProvider(), now, true);
+                    return toResult(payment);
+                }
                 listingReservationPort.markSold(OrderApplicationService.listingIds(order), order.getId());
-                payment.approve(gatewayResult.providerCode(), gatewayResult.approvedAt(), now);
+                payment.approve(
+                        gatewayResult.providerCode(), gatewayResult.providerStatus(),
+                        gatewayResult.method(), gatewayResult.easyPayProvider(),
+                        gatewayResult.approvedAt(), now);
                 order.markPaid(now);
                 eventPublisher.publish(CommerceEvent.orderEvent(
                         CommerceEventType.PAYMENT_DONE, order.getBuyerId(), order.getId(), now));
@@ -66,7 +84,9 @@ public class PaymentFinalizationService {
                 order.cancelAfterDefinitivePaymentFailure(now);
                 listingReservationPort.releaseOwned(OrderApplicationService.listingIds(order), order.getId());
             }
-            case UNKNOWN -> payment.unknown(gatewayResult.providerCode(), now);
+            case UNKNOWN -> payment.unknown(
+                    gatewayResult.providerCode(), gatewayResult.providerStatus(),
+                    gatewayResult.method(), gatewayResult.easyPayProvider(), now, false);
         }
         return toResult(payment);
     }

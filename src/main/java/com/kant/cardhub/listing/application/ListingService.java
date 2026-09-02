@@ -6,6 +6,7 @@ import com.kant.cardhub.common.error.ErrorCode;
 import com.kant.cardhub.listing.domain.CardCondition;
 import com.kant.cardhub.listing.domain.Listing;
 import com.kant.cardhub.listing.domain.ListingImage;
+import com.kant.cardhub.listing.domain.ListingModerationStatus;
 import com.kant.cardhub.listing.domain.ListingStatus;
 import com.kant.cardhub.listing.infrastructure.ListingImageRepository;
 import com.kant.cardhub.listing.infrastructure.ListingRepository;
@@ -70,6 +71,7 @@ public class ListingService {
         validateRange(minPrice, maxPrice);
         var result = listingRepository.search(
                 ListingStatus.ACTIVE,
+                ListingModerationStatus.CLEAR,
                 cardVariantId,
                 minPrice,
                 maxPrice,
@@ -86,7 +88,9 @@ public class ListingService {
 
     public ListingView.Detail detail(UUID listingId) {
         Listing listing = find(listingId);
-        if (listing.getStatus() == ListingStatus.DELETED || listing.getStatus() == ListingStatus.HIDDEN) {
+        if (listing.isBlocked()
+                || listing.getStatus() == ListingStatus.DELETED
+                || listing.getStatus() == ListingStatus.HIDDEN) {
             throw new BusinessException(ErrorCode.LISTING_NOT_FOUND);
         }
         return toDetail(listing);
@@ -116,9 +120,7 @@ public class ListingService {
             List<UUID> uploadSessionIds
     ) {
         activeUserLock.requireActive(sellerId);
-        if (!catalogService.variantExists(cardVariantId)) {
-            throw new BusinessException(ErrorCode.CATALOG_NOT_FOUND, "카드 variant를 찾을 수 없습니다.");
-        }
+        catalogService.requireListable(cardVariantId);
         List<UploadView.Attachment> attachments = uploadService.attachUploads(sellerId, uploadSessionIds);
         Instant now = clock.instant();
         Listing listing = listingRepository.save(Listing.create(
@@ -184,16 +186,9 @@ public class ListingService {
         find(listingId).delete(sellerId, clock.instant());
     }
 
-    @Transactional
-    public ListingView.Detail adminHide(UUID listingId) {
-        Listing listing = find(listingId);
-        listing.adminHide(clock.instant());
-        return toDetail(listing);
-    }
-
     public Listing requirePurchasable(UUID listingId) {
         Listing listing = find(listingId);
-        if (listing.getStatus() != ListingStatus.ACTIVE) {
+        if (!listing.isReservable()) {
             throw new BusinessException(ErrorCode.LISTING_INVALID_STATE);
         }
         return listing;
@@ -212,6 +207,7 @@ public class ListingService {
         return new ListingView.Detail(
                 listing.getId(), listing.getSellerId(), listing.getCardVariantId(), listing.getCardCondition(),
                 listing.getDescription(), listing.getPrice(), listing.getShippingFee(), listing.getStatus(),
+                listing.getModerationStatus(), listing.getBlockedAt(), listing.getBlockedReason(),
                 images.stream().map(this::toImage).toList(), listing.getCreatedAt(), listing.getUpdatedAt()
         );
     }
@@ -220,6 +216,7 @@ public class ListingService {
         return new ListingView.Summary(
                 listing.getId(), listing.getSellerId(), listing.getCardVariantId(), listing.getCardCondition(),
                 listing.getPrice(), listing.getShippingFee(), listing.getStatus(),
+                listing.getModerationStatus(), listing.getBlockedAt(), listing.getBlockedReason(),
                 primaryImage == null ? null : objectStorage.publicUrl(primaryImage.getStorageKey()),
                 listing.getCreatedAt()
         );

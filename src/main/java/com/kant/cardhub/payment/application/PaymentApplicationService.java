@@ -53,12 +53,27 @@ public class PaymentApplicationService {
     }
 
     public PaymentResult reconcile(UUID paymentId) {
-        Payment snapshot = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
-        if (snapshot.getStatus() != PaymentStatus.UNKNOWN && snapshot.getStatus() != PaymentStatus.CONFIRMING) {
+        PaymentPreparationService.RetryAttempt retry = preparationService.prepareReconcile(paymentId);
+        Payment snapshot = retry.payment();
+        if (!retry.callGateway()) {
             return new PaymentResult(snapshot.getId(), snapshot.getOrderId(), snapshot.getStatus());
         }
         PaymentGateway.PaymentGatewayResult result;
+        try {
+            result = paymentGateway.confirm(new PaymentGateway.ConfirmRequest(
+                    snapshot.getPaymentKey(), snapshot.getTossOrderId(), snapshot.getAmount(),
+                    snapshot.getIdempotencyKey()));
+        } catch (RuntimeException exception) {
+            result = PaymentGateway.PaymentGatewayResult.unknown("GATEWAY_RECONFIRM_FAILED");
+        }
+        PaymentResult confirmation = finalizationService.finalizeResult(paymentId, result);
+        if (confirmation.status() != PaymentStatus.UNKNOWN) {
+            return confirmation;
+        }
+        Payment afterConfirm = paymentRepository.findById(paymentId).orElseThrow();
+        if (afterConfirm.isManualReviewRequired()) {
+            return confirmation;
+        }
         try {
             result = paymentGateway.lookup(snapshot.getPaymentKey());
         } catch (RuntimeException exception) {
@@ -69,10 +84,12 @@ public class PaymentApplicationService {
 
     @Transactional(readOnly = true)
     public List<UUID> findUnknown(int limit) {
+        java.time.Instant now = clock.instant();
         return paymentRepository.findRecoverableIds(
                 PaymentStatus.UNKNOWN,
                 PaymentStatus.CONFIRMING,
-                clock.instant().minus(Duration.ofMinutes(2)),
+                now,
+                now.minus(Duration.ofMinutes(2)),
                 PageRequest.of(0, Math.max(1, Math.min(limit, 500))));
     }
 

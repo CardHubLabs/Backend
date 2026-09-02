@@ -35,10 +35,36 @@ public interface PaymentGateway {
     record PaymentGatewayResult(
             ResultStatus status,
             String providerCode,
-            Instant approvedAt
+            Instant approvedAt,
+            String paymentKey,
+            String orderId,
+            Long totalAmount,
+            String method,
+            String easyPayProvider,
+            String providerStatus,
+            boolean identityValidationRequired
     ) {
+        public PaymentGatewayResult(ResultStatus status, String providerCode, Instant approvedAt) {
+            this(status, providerCode, approvedAt, null, null, null, null, null, null, false);
+        }
+
         public static PaymentGatewayResult approved(String code, Instant at) {
             return new PaymentGatewayResult(ResultStatus.APPROVED, code, at);
+        }
+
+        public static PaymentGatewayResult providerApproved(
+                String code,
+                Instant at,
+                String paymentKey,
+                String orderId,
+                Long totalAmount,
+                String method,
+                String easyPayProvider,
+                String providerStatus
+        ) {
+            return new PaymentGatewayResult(
+                    ResultStatus.APPROVED, code, at, paymentKey, orderId, totalAmount,
+                    method, easyPayProvider, providerStatus, true);
         }
 
         public static PaymentGatewayResult declined(String code) {
@@ -47,6 +73,20 @@ public interface PaymentGateway {
 
         public static PaymentGatewayResult unknown(String code) {
             return new PaymentGatewayResult(ResultStatus.UNKNOWN, code, null);
+        }
+
+        public static PaymentGatewayResult providerUnknown(
+                String code,
+                String paymentKey,
+                String orderId,
+                Long totalAmount,
+                String method,
+                String easyPayProvider,
+                String providerStatus
+        ) {
+            return new PaymentGatewayResult(
+                    ResultStatus.UNKNOWN, code, null, paymentKey, orderId, totalAmount,
+                    method, easyPayProvider, providerStatus, true);
         }
     }
 }

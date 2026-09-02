@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.AssertTrue;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -40,9 +41,12 @@ public class PriceAlertController {
             @CurrentUserId UUID userId,
             @Valid @RequestBody CreatePriceAlertRequest request
     ) {
-        return ApiResponse.success(PriceAlertResponse.from(priceAlertService.create(
-                userId, request.listingId(), request.thresholdPercentage()
-        )));
+        PriceAlert alert = request.cardVariantId() != null
+                ? priceAlertService.createForVariant(
+                        userId, request.cardVariantId(), request.thresholdPercentage())
+                : priceAlertService.create(
+                        userId, request.listingId(), request.thresholdPercentage());
+        return ApiResponse.success(PriceAlertResponse.from(alert));
     }
 
     @DeleteMapping("/{alertId}")
@@ -64,13 +68,23 @@ public class PriceAlertController {
     }
 
     public record CreatePriceAlertRequest(
-            @NotNull UUID listingId,
+            UUID cardVariantId,
+            UUID listingId,
             @Min(1) @Max(99) Integer thresholdPercentage
     ) {
+        public CreatePriceAlertRequest(UUID listingId, Integer thresholdPercentage) {
+            this(null, listingId, thresholdPercentage);
+        }
+
+        @AssertTrue(message = "exactly one of cardVariantId and listingId is required")
+        public boolean hasExactlyOneTarget() {
+            return (cardVariantId != null) ^ (listingId != null);
+        }
     }
 
     public record PriceAlertResponse(
             UUID id,
+            UUID cardVariantId,
             UUID listingId,
             long baselinePrice,
             int thresholdPercentage,
@@ -81,7 +95,7 @@ public class PriceAlertController {
     ) {
         static PriceAlertResponse from(PriceAlert alert) {
             return new PriceAlertResponse(
-                    alert.getId(), alert.getListingId(), alert.getBaselinePrice(),
+                    alert.getId(), alert.getCardVariantId(), alert.getListingId(), alert.getBaselinePrice(),
                     alert.getThresholdPercentage(), alert.isActive(), alert.getTriggeredPrice(),
                     alert.getTriggeredAt(), alert.getCreatedAt()
             );

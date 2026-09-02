@@ -2,6 +2,8 @@ package com.kant.cardhub.catalog.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -23,6 +25,10 @@ public class CardGame {
     @Column(nullable = false, unique = true, length = 100)
     private String slug;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, unique = true, length = 30)
+    private GameCode code;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -32,27 +38,38 @@ public class CardGame {
     protected CardGame() {
     }
 
-    private CardGame(UUID id, String name, String slug, Instant now) {
+    private CardGame(UUID id, String name, String slug, GameCode code, Instant now) {
         this.id = Objects.requireNonNull(id);
         this.name = requireText(name, "name");
         this.slug = requireText(slug, "slug").toLowerCase(Locale.ROOT);
+        this.code = Objects.requireNonNull(code);
         this.createdAt = Objects.requireNonNull(now);
         this.updatedAt = now;
     }
 
     public static CardGame create(String name, String slug, Instant now) {
-        return new CardGame(UUID.randomUUID(), name, slug, now);
+        return create(name, slug, GameCode.fromLegacySlug(slug), now);
+    }
+
+    public static CardGame create(String name, String slug, GameCode code, Instant now) {
+        return new CardGame(UUID.randomUUID(), name, slug, code, now);
     }
 
     public UUID getId() { return id; }
     public String getName() { return name; }
     public String getSlug() { return slug; }
+    public GameCode getCode() { return code; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
     public void update(String name, String slug, Instant now) {
+        update(name, slug, code, now);
+    }
+
+    public void update(String name, String slug, GameCode code, Instant now) {
         this.name = requireText(name, "name");
         this.slug = requireText(slug, "slug").toLowerCase(Locale.ROOT);
+        this.code = Objects.requireNonNull(code);
         this.updatedAt = Objects.requireNonNull(now);
     }
 

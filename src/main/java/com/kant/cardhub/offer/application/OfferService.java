@@ -3,7 +3,6 @@ package com.kant.cardhub.offer.application;
 import com.kant.cardhub.common.error.BusinessException;
 import com.kant.cardhub.common.error.ErrorCode;
 import com.kant.cardhub.listing.domain.Listing;
-import com.kant.cardhub.listing.domain.ListingStatus;
 import com.kant.cardhub.listing.infrastructure.ListingRepository;
 import com.kant.cardhub.offer.domain.Offer;
 import com.kant.cardhub.offer.domain.OfferAction;
@@ -66,7 +65,7 @@ public class OfferService {
         activeUserLock.requireActive(buyerId);
         Listing listing = listingRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
-        if (listing.getStatus() != ListingStatus.ACTIVE) throw new BusinessException(ErrorCode.LISTING_INVALID_STATE);
+        if (!listing.isReservable()) throw new BusinessException(ErrorCode.LISTING_INVALID_STATE);
         if (listing.isOwnedBy(buyerId)) throw new BusinessException(ErrorCode.OFFER_FORBIDDEN);
         if (offeredPrice < Offer.MIN_PRICE || offeredPrice > listing.getPrice()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "제안 가격은 500원 이상, 매물 가격 이하여야 합니다.");
@@ -205,6 +204,25 @@ public class OfferService {
         return expired;
     }
 
+    @Transactional
+    public int expireForBlockedListing(UUID listingId, UUID adminId) {
+        Instant now = clock.instant();
+        List<Offer> offers = offerRepository.findAllByListingIdAndStatusInForUpdate(listingId, EXPIRABLE);
+        int expired = 0;
+        for (Offer offer : offers) {
+            if (offer.expireForListingBlock(now)) {
+                expired++;
+                actionRepository.save(OfferAction.create(
+                        offer.getId(), adminId, OfferActionType.EXPIRED, null, now
+                ));
+                eventPorts.forEach(port -> port.onExpired(
+                        offer.getBuyerId(), offer.getId(), "offer-expired:listing-block:" + offer.getId()
+                ));
+            }
+        }
+        return expired;
+    }
+
     private Offer locked(UUID offerId) {
         return offerRepository.findByIdForUpdate(offerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OFFER_NOT_FOUND));
@@ -213,7 +231,7 @@ public class OfferService {
     private Listing lockActiveListing(UUID listingId) {
         Listing listing = listingRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
-        if (listing.getStatus() != ListingStatus.ACTIVE) throw new BusinessException(ErrorCode.LISTING_INVALID_STATE);
+        if (!listing.isReservable()) throw new BusinessException(ErrorCode.LISTING_INVALID_STATE);
         return listing;
     }
 

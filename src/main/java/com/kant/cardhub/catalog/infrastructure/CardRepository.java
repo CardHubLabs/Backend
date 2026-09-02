@@ -15,6 +15,9 @@ public interface CardRepository extends JpaRepository<Card, UUID> {
             select c from Card c
             where (:cardSetId is null or c.cardSetId = :cardSetId)
               and (:query is null or lower(c.name) like lower(concat('%', :query, '%'))
+                   or lower(c.nameKo) like lower(concat('%', :query, '%'))
+                   or lower(c.nameEn) like lower(concat('%', :query, '%'))
+                   or lower(c.nameJa) like lower(concat('%', :query, '%'))
                    or lower(c.cardNumber) like lower(concat('%', :query, '%')))
             """)
     Page<Card> search(@Param("cardSetId") UUID cardSetId, @Param("query") String query, Pageable pageable);

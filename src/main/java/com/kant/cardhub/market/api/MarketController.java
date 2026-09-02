@@ -42,15 +42,22 @@ public class MarketController {
             UUID cardVariantId,
             Long recentPrice,
             Long average7d,
+            Long median7d,
+            Long average30d,
             Long median30d,
+            Long average90d,
+            Long median90d,
             Long activeLowestPrice,
             long volume30d,
             Instant calculatedAt
     ) {
         static MarketResponse from(MarketPriceStat stat) {
             return new MarketResponse(
-                    stat.getCardVariantId(), stat.getRecentPrice(), stat.getAverage7d(),
-                    stat.getMedian30d(), stat.getActiveLowestPrice(), stat.getVolume30d(),
+                    stat.getCardVariantId(), stat.getRecentPrice(),
+                    stat.getAverage7d(), stat.getMedian7d(),
+                    stat.getAverage30d(), stat.getMedian30d(),
+                    stat.getAverage90d(), stat.getMedian90d(),
+                    stat.getActiveLowestPrice(), stat.getVolume30d(),
                     stat.getCalculatedAt());
         }
     }

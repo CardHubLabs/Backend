@@ -45,4 +45,29 @@ class TossPaymentGatewayTest {
 
         assertThat(result.status()).isEqualTo(PaymentGateway.ResultStatus.APPROVED);
     }
+
+    @Test
+    void approvedPaymentCarriesEveryIdentityFieldForServerValidation() {
+        PaymentGateway.PaymentGatewayResult result = gateway.map(
+                new TossPaymentGateway.TossPaymentResponse(
+                        "payment-key", "CH-123456", 13_000L, "간편결제",
+                        new TossPaymentGateway.TossEasyPay("토스페이"),
+                        "DONE", "2026-08-25T09:00:00+09:00", 13_000L));
+
+        assertThat(result.status()).isEqualTo(PaymentGateway.ResultStatus.APPROVED);
+        assertThat(result.identityValidationRequired()).isTrue();
+        assertThat(result.paymentKey()).isEqualTo("payment-key");
+        assertThat(result.orderId()).isEqualTo("CH-123456");
+        assertThat(result.totalAmount()).isEqualTo(13_000L);
+        assertThat(result.method()).isEqualTo("간편결제");
+        assertThat(result.easyPayProvider()).isEqualTo("토스페이");
+    }
+
+    @Test
+    void notFoundLookupDoesNotDefinitivelyFailAnUnknownPayment() {
+        PaymentGateway.PaymentGatewayResult result =
+                gateway.classifyLookupFailure(404, "NOT_FOUND_PAYMENT");
+
+        assertThat(result.status()).isEqualTo(PaymentGateway.ResultStatus.UNKNOWN);
+    }
 }

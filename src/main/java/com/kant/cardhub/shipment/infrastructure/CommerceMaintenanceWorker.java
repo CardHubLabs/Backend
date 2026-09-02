@@ -5,6 +5,7 @@ import com.kant.cardhub.payment.application.PaymentApplicationService;
 import com.kant.cardhub.payment.application.RefundProcessingService;
 import com.kant.cardhub.shipment.application.ShipmentAutoConfirmationService;
 import com.kant.cardhub.shipment.application.ShipmentTrackingService;
+import com.kant.cardhub.shipment.application.ShippingCarrierCatalogSyncService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,19 +27,22 @@ public class CommerceMaintenanceWorker {
     private final RefundProcessingService refundService;
     private final ShipmentTrackingService trackingService;
     private final ShipmentAutoConfirmationService autoConfirmationService;
+    private final ShippingCarrierCatalogSyncService carrierCatalogSyncService;
 
     public CommerceMaintenanceWorker(
             OrderExpiryService orderExpiryService,
             PaymentApplicationService paymentService,
             RefundProcessingService refundService,
             ShipmentTrackingService trackingService,
-            ShipmentAutoConfirmationService autoConfirmationService
+            ShipmentAutoConfirmationService autoConfirmationService,
+            ShippingCarrierCatalogSyncService carrierCatalogSyncService
     ) {
         this.orderExpiryService = orderExpiryService;
         this.paymentService = paymentService;
         this.refundService = refundService;
         this.trackingService = trackingService;
         this.autoConfirmationService = autoConfirmationService;
+        this.carrierCatalogSyncService = carrierCatalogSyncService;
     }
 
     @Scheduled(fixedDelayString = "${cardhub.worker.order-expiry-delay:5000}")
@@ -63,6 +67,19 @@ public class CommerceMaintenanceWorker {
                 autoConfirmationService::sendNotice);
         forEachSafely("auto-confirm", autoConfirmationService.findAutoConfirmDue(BATCH_SIZE),
                 autoConfirmationService::autoConfirm);
+    }
+
+    @Scheduled(
+            initialDelayString = "${cardhub.worker.carrier-sync-initial-delay:10000}",
+            fixedDelayString = "${cardhub.worker.carrier-sync-delay:86400000}"
+    )
+    public void synchronizeCarriers() {
+        try {
+            int count = carrierCatalogSyncService.synchronize();
+            log.info("Shipping carrier catalogue synchronized count={}", count);
+        } catch (RuntimeException failure) {
+            log.warn("Shipping carrier catalogue sync failed; keeping last successful data", failure);
+        }
     }
 
     private void forEachSafely(String task, Iterable<UUID> ids, Consumer<UUID> operation) {

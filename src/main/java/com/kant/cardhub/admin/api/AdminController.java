@@ -4,6 +4,7 @@ import com.kant.cardhub.admin.application.AdminService;
 import com.kant.cardhub.common.api.ApiResponse;
 import com.kant.cardhub.common.security.CurrentUserId;
 import com.kant.cardhub.listing.domain.Listing;
+import com.kant.cardhub.listing.domain.ListingModerationStatus;
 import com.kant.cardhub.listing.domain.ListingStatus;
 import com.kant.cardhub.order.domain.Order;
 import com.kant.cardhub.order.domain.OrderStatus;
@@ -68,6 +69,25 @@ public class AdminController {
             @PathVariable UUID listingId
     ) {
         adminService.hideListing(adminId, listingId);
+        return ApiResponse.empty();
+    }
+
+    @PostMapping("/listings/{listingId}/block")
+    public ApiResponse<Void> blockListing(
+            @CurrentUserId UUID adminId,
+            @PathVariable UUID listingId,
+            @Valid @RequestBody BlockListingRequest request
+    ) {
+        adminService.blockListing(adminId, listingId, request.reason());
+        return ApiResponse.empty();
+    }
+
+    @PostMapping("/listings/{listingId}/unblock")
+    public ApiResponse<Void> unblockListing(
+            @CurrentUserId UUID adminId,
+            @PathVariable UUID listingId
+    ) {
+        adminService.unblockListing(adminId, listingId);
         return ApiResponse.empty();
     }
 
@@ -152,6 +172,20 @@ public class AdminController {
         return ApiResponse.success(PagePayload.from(adminService.payments(page, size), PaymentResponse::from));
     }
 
+    @GetMapping("/payments/{paymentId}")
+    public ApiResponse<PaymentResponse> payment(@PathVariable UUID paymentId) {
+        return ApiResponse.success(PaymentResponse.from(adminService.payment(paymentId)));
+    }
+
+    @PostMapping("/payments/{paymentId}/reconcile")
+    public ApiResponse<PaymentReconcileResponse> reconcilePayment(
+            @CurrentUserId UUID adminId,
+            @PathVariable UUID paymentId
+    ) {
+        return ApiResponse.success(new PaymentReconcileResponse(
+                adminService.enqueuePaymentReconcile(adminId, paymentId)));
+    }
+
     @GetMapping("/refunds")
     public ApiResponse<PagePayload<RefundResponse>> refunds(
             @RequestParam(defaultValue = "0") int page,
@@ -191,14 +225,23 @@ public class AdminController {
             long price,
             long shippingFee,
             ListingStatus status,
+            ListingModerationStatus moderationStatus,
+            Instant blockedAt,
+            UUID blockedBy,
+            String blockedReason,
             Instant createdAt
     ) {
         static ListingResponse from(Listing listing) {
             return new ListingResponse(
                     listing.getId(), listing.getSellerId(), listing.getCardVariantId(),
-                    listing.getPrice(), listing.getShippingFee(), listing.getStatus(), listing.getCreatedAt()
+                    listing.getPrice(), listing.getShippingFee(), listing.getStatus(),
+                    listing.getModerationStatus(), listing.getBlockedAt(), listing.getBlockedBy(),
+                    listing.getBlockedReason(), listing.getCreatedAt()
             );
         }
+    }
+
+    public record BlockListingRequest(@NotBlank @Size(max = 500) String reason) {
     }
 
     public record OrderResponse(
@@ -224,14 +267,28 @@ public class AdminController {
             long amount,
             PaymentStatus status,
             String providerCode,
+            String providerStatus,
+            com.kant.cardhub.payment.domain.PaymentMethod paymentMethod,
+            String easyPayProvider,
+            int confirmAttemptCount,
+            Instant lastConfirmAttemptAt,
+            Instant nextReconcileAt,
+            boolean manualReviewRequired,
             Instant approvedAt
     ) {
         static PaymentResponse from(Payment payment) {
             return new PaymentResponse(
                     payment.getId(), payment.getOrderId(), payment.getBuyerId(), payment.getAmount(),
-                    payment.getStatus(), payment.getProviderCode(), payment.getApprovedAt()
+                    payment.getStatus(), payment.getProviderCode(), payment.getProviderStatus(),
+                    payment.getPaymentMethod(), payment.getEasyPayProvider(),
+                    payment.getConfirmAttemptCount(), payment.getLastConfirmAttemptAt(),
+                    payment.getNextReconcileAt(), payment.isManualReviewRequired(),
+                    payment.getApprovedAt()
             );
         }
+    }
+
+    public record PaymentReconcileResponse(UUID jobId) {
     }
 
     public record RefundResponse(

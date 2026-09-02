@@ -70,6 +70,15 @@ public class PaymentController {
                 refundRequestService.request(buyerId, orderId, request.reason())));
     }
 
+    @GetMapping("/orders/{orderId}/refund")
+    public ApiResponse<RefundResponse> refund(
+            @CurrentUserId UUID buyerId,
+            @PathVariable UUID orderId
+    ) {
+        return ApiResponse.success(RefundResponse.from(
+                refundRequestService.findForBuyer(buyerId, orderId)));
+    }
+
     public record ConfirmPaymentRequest(
             @NotNull UUID orderId,
             @NotBlank @Size(max = 200) String paymentKey,

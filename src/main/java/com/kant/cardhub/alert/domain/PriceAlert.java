@@ -21,8 +21,11 @@ public class PriceAlert {
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
-    @Column(name = "listing_id", nullable = false, updatable = false)
+    @Column(name = "listing_id", updatable = false)
     private UUID listingId;
+
+    @Column(name = "card_variant_id", nullable = false, updatable = false)
+    private UUID cardVariantId;
 
     @Column(name = "baseline_price", nullable = false, updatable = false)
     private long baselinePrice;
@@ -59,6 +62,18 @@ public class PriceAlert {
             int thresholdPercentage,
             Instant now
     ) {
+        this(id, userId, listingId, listingId, baselinePrice, thresholdPercentage, now);
+    }
+
+    public PriceAlert(
+            UUID id,
+            UUID userId,
+            UUID cardVariantId,
+            UUID legacyListingId,
+            long baselinePrice,
+            int thresholdPercentage,
+            Instant now
+    ) {
         if (baselinePrice < 0) {
             throw new IllegalArgumentException("baselinePrice must not be negative");
         }
@@ -67,7 +82,8 @@ public class PriceAlert {
         }
         this.id = id;
         this.userId = userId;
-        this.listingId = listingId;
+        this.cardVariantId = cardVariantId;
+        this.listingId = legacyListingId;
         this.baselinePrice = baselinePrice;
         this.thresholdPercentage = thresholdPercentage;
         this.active = true;
@@ -110,6 +126,8 @@ public class PriceAlert {
         return listingId;
     }
 
+    public UUID getCardVariantId() { return cardVariantId; }
+
     public long getBaselinePrice() {
         return baselinePrice;
     }
@@ -138,4 +156,3 @@ public class PriceAlert {
         return updatedAt;
     }
 }
-

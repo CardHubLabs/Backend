@@ -26,7 +26,9 @@ public class StubPaymentGateway implements PaymentGateway {
         if (request.paymentKey().startsWith("fail_")) {
             return PaymentGatewayResult.declined("STUB_DECLINED");
         }
-        return PaymentGatewayResult.approved("STUB_APPROVED", clock.instant());
+        return PaymentGatewayResult.providerApproved(
+                "STUB_APPROVED", clock.instant(), request.paymentKey(), request.tossOrderId(),
+                request.amount(), "CARD", null, "DONE");
     }
 
     @Override

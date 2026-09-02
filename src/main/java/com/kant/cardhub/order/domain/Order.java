@@ -28,6 +28,9 @@ public class Order {
     @Id
     private UUID id;
 
+    @Column(name = "order_no", nullable = false, unique = true, length = 48)
+    private String orderNo;
+
     @Column(name = "buyer_id", nullable = false)
     private UUID buyerId;
 
@@ -59,6 +62,9 @@ public class Order {
     @Column(name = "shipping_address_key_version", nullable = false, length = 64)
     private String shippingAddressKeyVersion;
 
+    @Column(name = "shipping_address_schema_version", nullable = false)
+    private short shippingAddressSchemaVersion;
+
     @Column(name = "confirmed_at")
     private Instant confirmedAt;
 
@@ -85,6 +91,20 @@ public class Order {
             String shippingAddressKeyVersion,
             Instant now
     ) {
+        return create(
+                buyerId, sellerId, drafts, shippingAddressCiphertext,
+                shippingAddressKeyVersion, (short) 1, now);
+    }
+
+    public static Order create(
+            UUID buyerId,
+            UUID sellerId,
+            List<OrderItemDraft> drafts,
+            String shippingAddressCiphertext,
+            String shippingAddressKeyVersion,
+            short shippingAddressSchemaVersion,
+            Instant now
+    ) {
         Objects.requireNonNull(buyerId, "buyerId");
         Objects.requireNonNull(sellerId, "sellerId");
         Objects.requireNonNull(now, "now");
@@ -100,9 +120,13 @@ public class Order {
         if (shippingAddressCiphertext == null || shippingAddressCiphertext.isBlank()) {
             throw new IllegalArgumentException("Encrypted shipping address is required");
         }
+        if (shippingAddressSchemaVersion != 1 && shippingAddressSchemaVersion != 2) {
+            throw new IllegalArgumentException("Unsupported shipping address schema version");
+        }
 
         Order order = new Order();
         order.id = UUID.randomUUID();
+        order.orderNo = "CH-" + order.id.toString().replace("-", "");
         order.buyerId = buyerId;
         order.sellerId = sellerId;
         order.itemSubtotal = drafts.stream().mapToLong(OrderItemDraft::price).sum();
@@ -112,6 +136,7 @@ public class Order {
         order.reservationExpiresAt = now.plus(RESERVATION_DURATION);
         order.shippingAddressCiphertext = shippingAddressCiphertext;
         order.shippingAddressKeyVersion = shippingAddressKeyVersion;
+        order.shippingAddressSchemaVersion = shippingAddressSchemaVersion;
         order.createdAt = now;
         order.updatedAt = now;
         drafts.forEach(draft -> order.items.add(new OrderItem(order, draft, now)));
@@ -245,6 +270,7 @@ public class Order {
     }
 
     public UUID getId() { return id; }
+    public String getOrderNo() { return orderNo; }
     public UUID getBuyerId() { return buyerId; }
     public UUID getSellerId() { return sellerId; }
     public long getItemSubtotal() { return itemSubtotal; }
@@ -257,5 +283,6 @@ public class Order {
     public Instant getCreatedAt() { return createdAt; }
     public String getShippingAddressCiphertext() { return shippingAddressCiphertext; }
     public String getShippingAddressKeyVersion() { return shippingAddressKeyVersion; }
+    public short getShippingAddressSchemaVersion() { return shippingAddressSchemaVersion; }
     public List<OrderItem> getItems() { return Collections.unmodifiableList(items); }
 }

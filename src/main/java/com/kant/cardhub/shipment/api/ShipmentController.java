@@ -86,13 +86,15 @@ public class ShipmentController {
             String carrierCode,
             String trackingNumber,
             ShipmentStatus status,
+            Instant shippedAt,
             Instant deliveredAt,
             boolean autoConfirmHeld
     ) {
         static ShipmentResponse from(Shipment shipment) {
             return new ShipmentResponse(
                     shipment.getId(), shipment.getOrderId(), shipment.getCarrierCode(),
-                    shipment.getTrackingNumber(), shipment.getStatus(), shipment.getDeliveredAt(),
+                    shipment.getTrackingNumber(), shipment.getStatus(), shipment.getShippedAt(),
+                    shipment.getDeliveredAt(),
                     shipment.isAutoConfirmHeld());
         }
     }

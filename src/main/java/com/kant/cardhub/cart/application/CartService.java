@@ -44,9 +44,9 @@ public class CartService {
     @Transactional
     public CartView.Item add(UUID userId, UUID listingId) {
         activeUserLock.requireActive(userId);
-        Listing listing = listingRepository.findById(listingId)
+        Listing listing = listingRepository.findByIdForUpdate(listingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
-        if (listing.getStatus() != ListingStatus.ACTIVE) {
+        if (!listing.isReservable()) {
             throw new BusinessException(ErrorCode.LISTING_INVALID_STATE);
         }
         if (listing.isOwnedBy(userId)) {
@@ -110,7 +110,7 @@ public class CartService {
         return new CartView.Item(
                 item.getId(), listing.getId(), listing.getSellerId(), listing.getCardVariantId(),
                 listing.getPrice(), listing.getShippingFee(), listing.getStatus(),
-                listing.getStatus() == ListingStatus.ACTIVE, item.getCreatedAt()
+                listing.isReservable(), item.getCreatedAt()
         );
     }
 }

@@ -1,6 +1,7 @@
 package com.kant.cardhub.listing.infrastructure;
 
 import com.kant.cardhub.listing.domain.Listing;
+import com.kant.cardhub.listing.domain.ListingModerationStatus;
 import com.kant.cardhub.listing.domain.ListingStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -21,12 +22,14 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
     @Query("""
             select l from Listing l
             where l.status = :status
+              and l.moderationStatus = :moderationStatus
               and (:cardVariantId is null or l.cardVariantId = :cardVariantId)
               and (:minPrice is null or l.price >= :minPrice)
               and (:maxPrice is null or l.price <= :maxPrice)
             """)
     Page<Listing> search(
             @Param("status") ListingStatus status,
+            @Param("moderationStatus") ListingModerationStatus moderationStatus,
             @Param("cardVariantId") UUID cardVariantId,
             @Param("minPrice") Long minPrice,
             @Param("maxPrice") Long maxPrice,
@@ -49,7 +52,9 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
                    l.reservationExpiresAt = :expiresAt,
                    l.updatedAt = :now,
                    l.version = l.version + 1
-             where l.id = :listingId and l.status = :active
+             where l.id = :listingId
+               and l.status = :active
+               and l.moderationStatus = :clear
             """)
     int reserveIfActive(
             @Param("listingId") UUID listingId,
@@ -57,13 +62,17 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("expiresAt") Instant expiresAt,
             @Param("now") Instant now,
             @Param("active") ListingStatus active,
-            @Param("reserved") ListingStatus reserved
+            @Param("reserved") ListingStatus reserved,
+            @Param("clear") ListingModerationStatus clear
     );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update Listing l
-               set l.status = :active,
+               set l.status = case
+                                  when l.moderationStatus = :blocked then :hidden
+                                  else :active
+                              end,
                    l.reservationOrderId = null,
                    l.reservationExpiresAt = null,
                    l.updatedAt = :now,
@@ -75,7 +84,9 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("orderId") UUID orderId,
             @Param("now") Instant now,
             @Param("active") ListingStatus active,
-            @Param("reserved") ListingStatus reserved
+            @Param("hidden") ListingStatus hidden,
+            @Param("reserved") ListingStatus reserved,
+            @Param("blocked") ListingModerationStatus blocked
     );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

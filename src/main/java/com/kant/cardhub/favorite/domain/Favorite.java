@@ -18,8 +18,11 @@ public class Favorite {
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
-    @Column(name = "listing_id", nullable = false, updatable = false)
+    @Column(name = "listing_id", updatable = false)
     private UUID listingId;
+
+    @Column(name = "card_variant_id", nullable = false, updatable = false)
+    private UUID cardVariantId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -28,9 +31,20 @@ public class Favorite {
     }
 
     public Favorite(UUID id, UUID userId, UUID listingId, Instant createdAt) {
+        this(id, userId, listingId, listingId, createdAt);
+    }
+
+    public Favorite(
+            UUID id,
+            UUID userId,
+            UUID cardVariantId,
+            UUID legacyListingId,
+            Instant createdAt
+    ) {
         this.id = id;
         this.userId = userId;
-        this.listingId = listingId;
+        this.cardVariantId = cardVariantId;
+        this.listingId = legacyListingId;
         this.createdAt = createdAt;
     }
 
@@ -46,8 +60,9 @@ public class Favorite {
         return listingId;
     }
 
+    public UUID getCardVariantId() { return cardVariantId; }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
 }
-

@@ -61,7 +61,7 @@ public class Shipment {
     @Column(name = "consecutive_failures", nullable = false)
     private int consecutiveFailures;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
@@ -229,5 +229,6 @@ public class Shipment {
     public Instant getAutoConfirmNoticeSentAt() { return autoConfirmNoticeSentAt; }
     public Instant getLastProviderEventAt() { return lastProviderEventAt; }
     public Instant getNextCheckAt() { return nextCheckAt; }
+    public Instant getShippedAt() { return createdAt; }
     public Instant getCreatedAt() { return createdAt; }
 }

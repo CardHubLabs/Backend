@@ -160,6 +160,13 @@ public class Offer {
         return true;
     }
 
+    public boolean expireForListingBlock(Instant now) {
+        if (!isExpirable()) return false;
+        this.status = OfferStatus.EXPIRED;
+        this.updatedAt = Objects.requireNonNull(now);
+        return true;
+    }
+
     public void rejectAfterCompetingOfferAccepted(Instant now) {
         if (!isOpen()) return;
         this.status = OfferStatus.REJECTED;

@@ -83,8 +83,30 @@ class PaymentPreparationServiceTest {
         PaymentCommand changed = command(order, original.idempotencyKey(), original.amount() + 1);
 
         assertThatThrownBy(() -> service(paymentRepository, orderRepository).prepare(changed))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(com.kant.cardhub.common.error.BusinessException.class)
                 .hasMessageContaining("idempotency key");
+        verifyNoInteractions(orderRepository);
+    }
+
+    @Test
+    void exactUnknownDuplicateRetriesWithTheSameStoredPayload() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        OrderRepository orderRepository = mock(OrderRepository.class);
+        Order order = order();
+        PaymentCommand command = command(order, "idem-retry", order.getTotalAmount());
+        Payment existing = Payment.prepare(
+                order.getId(), order.getBuyerId(), command.idempotencyKey(), command.paymentKey(),
+                command.tossOrderId(), command.amount(), NOW.minusSeconds(30));
+        existing.unknown("TIMEOUT", NOW.minusSeconds(20));
+        when(paymentRepository.findByIdempotencyKeyForUpdate(command.idempotencyKey()))
+                .thenReturn(Optional.of(existing));
+
+        PaymentPreparationService.Preparation result = service(paymentRepository, orderRepository).prepare(command);
+
+        assertThat(result.callGateway()).isTrue();
+        assertThat(result.status()).isEqualTo(PaymentStatus.CONFIRMING);
+        assertThat(existing.getConfirmAttemptCount()).isEqualTo(2);
+        assertThat(existing.getIdempotencyKey()).isEqualTo(command.idempotencyKey());
         verifyNoInteractions(orderRepository);
     }
 
@@ -98,7 +120,7 @@ class PaymentPreparationServiceTest {
 
     private PaymentCommand command(Order order, String idempotencyKey, long amount) {
         return new PaymentCommand(
-                order.getBuyerId(), order.getId(), "payment-key", "toss-order", amount, idempotencyKey);
+                order.getBuyerId(), order.getId(), "payment-key", order.getOrderNo(), amount, idempotencyKey);
     }
 
     private Order order() {

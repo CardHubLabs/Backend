@@ -47,28 +47,55 @@ public class PriceAlertService {
 
     @Transactional
     public PriceAlert create(UUID userId, UUID listingId, Integer requestedThreshold) {
-        if (!userRowLock.acquire(userId)) {
-            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
-        }
-        if (priceAlertRepository.existsByUserIdAndListingIdAndActiveTrue(userId, listingId)) {
-            throw new BusinessException(ErrorCode.PRICE_ALERT_ALREADY_EXISTS);
-        }
-        if (priceAlertRepository.countByUserIdAndActiveTrue(userId) >= MAX_ACTIVE_ALERTS) {
-            throw new BusinessException(ErrorCode.PRICE_ALERT_LIMIT_EXCEEDED);
-        }
+        UUID variantId = listingPriceReader.activeListingVariant(listingId).orElse(listingId);
+        validateCreation(userId, variantId, listingId);
+        OptionalPrice baseline = resolveBaseline(variantId, listingId);
+        return createInternal(userId, variantId, listingId, baseline.value(), requestedThreshold);
+    }
 
-        long baselinePrice = listingPriceReader.currentActivePrice(listingId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+    @Transactional
+    public PriceAlert createForVariant(UUID userId, UUID variantId, Integer requestedThreshold) {
+        validateCreation(userId, variantId, null);
+        long baselinePrice = listingPriceReader.currentActiveLowestPrice(variantId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.BUSINESS_RULE_VIOLATION,
+                        "활성 매물이 없어 가격 알림 기준가를 계산할 수 없습니다."
+                ));
+        return createInternal(userId, variantId, null, baselinePrice, requestedThreshold);
+    }
+
+    private PriceAlert createInternal(
+            UUID userId,
+            UUID variantId,
+            UUID legacyListingId,
+            long baselinePrice,
+            Integer requestedThreshold
+    ) {
         int threshold = requestedThreshold == null
                 ? PriceAlert.DEFAULT_THRESHOLD_PERCENTAGE
                 : requestedThreshold;
 
         try {
             return priceAlertRepository.saveAndFlush(new PriceAlert(
-                    UUID.randomUUID(), userId, listingId, baselinePrice, threshold, Instant.now(clock)
+                    UUID.randomUUID(), userId, variantId, legacyListingId,
+                    baselinePrice, threshold, Instant.now(clock)
             ));
         } catch (DataIntegrityViolationException exception) {
             throw new BusinessException(ErrorCode.PRICE_ALERT_ALREADY_EXISTS);
+        }
+    }
+
+    private void validateCreation(UUID userId, UUID variantId, UUID legacyListingId) {
+        if (!userRowLock.acquire(userId)) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        if (priceAlertRepository.existsByUserIdAndCardVariantIdAndActiveTrue(userId, variantId)
+                || (legacyListingId != null
+                && priceAlertRepository.existsByUserIdAndListingIdAndActiveTrue(userId, legacyListingId))) {
+            throw new BusinessException(ErrorCode.PRICE_ALERT_ALREADY_EXISTS);
+        }
+        if (priceAlertRepository.countByUserIdAndActiveTrue(userId) >= MAX_ACTIVE_ALERTS) {
+            throw new BusinessException(ErrorCode.PRICE_ALERT_LIMIT_EXCEEDED);
         }
     }
 
@@ -116,5 +143,48 @@ public class PriceAlertService {
         }
         return fired;
     }
-}
 
+    /** Recalculates the active lowest price and evaluates every alert for the card variant. */
+    @Transactional
+    public int evaluateVariant(UUID cardVariantId) {
+        java.util.OptionalLong lowestPrice = listingPriceReader.currentActiveLowestPrice(cardVariantId);
+        if (lowestPrice.isEmpty()) {
+            return 0;
+        }
+        long currentPrice = lowestPrice.getAsLong();
+        List<PriceAlert> alerts = priceAlertRepository
+                .findAllByCardVariantIdAndActiveTrueOrderByCreatedAtAsc(cardVariantId);
+        Instant now = Instant.now(clock);
+        int fired = 0;
+        for (PriceAlert alert : alerts) {
+            if (!alert.shouldTrigger(currentPrice)) {
+                continue;
+            }
+            alert.trigger(currentPrice, now);
+            notificationService.send(new NotificationCommand(
+                    alert.getUserId(),
+                    NotificationType.PRICE_ALERT,
+                    "관심 카드의 최저가가 내려갔어요",
+                    "등록 당시 최저가보다 " + alert.getThresholdPercentage() + "% 이상 낮아졌습니다.",
+                    "CARD_VARIANT",
+                    cardVariantId,
+                    "PRICE_ALERT:" + alert.getId()
+            ));
+            fired++;
+        }
+        return fired;
+    }
+
+    private OptionalPrice resolveBaseline(UUID variantId, UUID listingId) {
+        java.util.OptionalLong variantLowest = listingPriceReader.currentActiveLowestPrice(variantId);
+        if (variantLowest.isPresent()) {
+            return new OptionalPrice(variantLowest.getAsLong());
+        }
+        long legacyPrice = listingPriceReader.currentActivePrice(listingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+        return new OptionalPrice(legacyPrice);
+    }
+
+    private record OptionalPrice(long value) {
+    }
+}

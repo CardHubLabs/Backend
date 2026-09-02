@@ -29,6 +29,7 @@ public class ListingEngagementService {
     @Transactional
     public void onPublished(UUID listingId, UUID variantId, UUID sellerId, long price) {
         notifyVariantFollowers(listingId, variantId, sellerId);
+        priceAlertService.evaluateVariant(variantId);
         notifyUndercutSellers(listingId, variantId, sellerId, price);
     }
 
@@ -40,7 +41,7 @@ public class ListingEngagementService {
             long previousPrice,
             long currentPrice
     ) {
-        priceAlertService.fireEligibleAlerts(listingId, currentPrice);
+        priceAlertService.evaluateVariant(variantId);
         if (currentPrice < previousPrice) {
             notifyUndercutSellers(listingId, variantId, sellerId, currentPrice);
         }
@@ -50,8 +51,7 @@ public class ListingEngagementService {
         List<UUID> recipients = jdbcTemplate.queryForList("""
                 SELECT DISTINCT f.user_id
                   FROM favorites f
-                  JOIN listings watched ON watched.id = f.listing_id
-                 WHERE watched.card_variant_id = ?
+                 WHERE f.card_variant_id = ?
                    AND f.user_id <> ?
                 """, UUID.class, variantId, sellerId);
 
@@ -74,6 +74,7 @@ public class ListingEngagementService {
                   FROM listings
                  WHERE card_variant_id = ?
                    AND status = 'ACTIVE'
+                   AND moderation_status = 'CLEAR'
                    AND price > ?
                    AND id <> ?
                    AND seller_id <> ?

@@ -29,6 +29,17 @@ public interface OfferRepository extends JpaRepository<Offer, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select o from Offer o
+             where o.listingId = :listingId and o.status in :statuses
+             order by o.id
+            """)
+    List<Offer> findAllByListingIdAndStatusInForUpdate(
+            @Param("listingId") UUID listingId,
+            @Param("statuses") Collection<OfferStatus> statuses
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select o from Offer o
              where o.status in :statuses and o.expiresAt <= :now
              order by o.expiresAt asc, o.id asc
             """)

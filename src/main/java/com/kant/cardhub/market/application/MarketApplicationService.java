@@ -7,8 +7,6 @@ import com.kant.cardhub.market.domain.MarketPriceStat;
 import com.kant.cardhub.market.infrastructure.MarketPriceStatRepository;
 import com.kant.cardhub.trade.domain.Trade;
 import com.kant.cardhub.trade.infrastructure.TradeRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +25,6 @@ public class MarketApplicationService {
     private final CardVariantRepository cardVariantRepository;
     private final Clock clock;
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
     public MarketApplicationService(
             TradeRepository tradeRepository,
             MarketPriceStatRepository statRepository,
@@ -45,25 +40,26 @@ public class MarketApplicationService {
     @Transactional
     public MarketPriceStat refresh(UUID variantId) {
         Instant now = clock.instant();
-        List<Trade> recent = tradeRepository.findRecent(variantId, PageRequest.of(0, 1));
-        Double average = tradeRepository.averageSince(variantId, now.minus(Duration.ofDays(7)));
-        Number median = tradeRepository.medianSince(variantId, now.minus(Duration.ofDays(30)));
-        long volume = tradeRepository.countSince(variantId, now.minus(Duration.ofDays(30)));
-        Number lowest = (Number) entityManager.createNativeQuery("""
-                        select min(price) from listings
-                         where card_variant_id = :variantId and status = 'ACTIVE'
-                        """)
-                .setParameter("variantId", variantId)
-                .getSingleResult();
+        MarketPriceStatRepository.MarketAggregate aggregate = statRepository.aggregate(
+                variantId,
+                now.minus(Duration.ofDays(7)),
+                now.minus(Duration.ofDays(30)),
+                now.minus(Duration.ofDays(90))
+        );
+        Long lowest = statRepository.findActiveLowestPrice(variantId);
 
         MarketPriceStat stat = statRepository.findById(variantId)
                 .orElseGet(() -> MarketPriceStat.create(variantId));
         stat.refresh(
-                recent.isEmpty() ? null : recent.getFirst().getPrice(),
-                average == null ? null : Math.round(average),
-                median == null ? null : Math.round(median.doubleValue()),
-                lowest == null ? null : lowest.longValue(),
-                volume,
+                aggregate.getRecentPrice(),
+                aggregate.getAverage7d(),
+                aggregate.getMedian7d(),
+                aggregate.getAverage30d(),
+                aggregate.getMedian30d(),
+                aggregate.getAverage90d(),
+                aggregate.getMedian90d(),
+                lowest,
+                aggregate.getVolume30d(),
                 now
         );
         return statRepository.save(stat);

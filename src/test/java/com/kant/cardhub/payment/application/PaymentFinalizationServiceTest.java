@@ -78,6 +78,30 @@ class PaymentFinalizationServiceTest {
     }
 
     @Test
+    void providerIdentityMismatchStaysUnknownAndRequiresManualReview() {
+        Fixture fixture = fixture();
+
+        PaymentResult result = fixture.service.finalizeResult(
+                fixture.payment.getId(),
+                PaymentGateway.PaymentGatewayResult.providerApproved(
+                        "DONE",
+                        NOW,
+                        fixture.payment.getPaymentKey(),
+                        "different-order-id",
+                        fixture.payment.getAmount(),
+                        "CARD",
+                        null,
+                        "DONE"
+                ));
+
+        assertThat(result.status()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(fixture.payment.isManualReviewRequired()).isTrue();
+        assertThat(fixture.order.getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
+        assertThat(fixture.order.isPaymentInFlight()).isTrue();
+        verifyNoInteractions(fixture.listings, fixture.events);
+    }
+
+    @Test
     void definitiveDuplicateReturnsExistingPaymentWithoutTouchingOrderAgain() {
         Fixture fixture = fixture();
         fixture.payment.approve("DONE", NOW.minusSeconds(1), NOW.minusSeconds(1));

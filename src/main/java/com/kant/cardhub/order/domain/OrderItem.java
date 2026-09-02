@@ -34,6 +34,18 @@ public class OrderItem {
     @Column(name = "unit_price", nullable = false)
     private long unitPrice;
 
+    @Column(name = "source_offer_id")
+    private UUID sourceOfferId;
+
+    @Column(name = "card_condition_snapshot", nullable = false, length = 40)
+    private String cardConditionSnapshot;
+
+    @Column(name = "shipping_fee_snapshot", nullable = false)
+    private long shippingFeeSnapshot;
+
+    @Column(name = "primary_image_storage_key", length = 500)
+    private String primaryImageStorageKey;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -47,6 +59,10 @@ public class OrderItem {
         this.cardVariantId = draft.cardVariantId();
         this.listingTitle = draft.listingTitle();
         this.unitPrice = draft.price();
+        this.sourceOfferId = draft.sourceOfferId();
+        this.cardConditionSnapshot = draft.cardConditionSnapshot();
+        this.shippingFeeSnapshot = draft.shippingFee();
+        this.primaryImageStorageKey = draft.primaryImageStorageKey();
         this.createdAt = now;
     }
 
@@ -69,4 +85,9 @@ public class OrderItem {
     public long getUnitPrice() {
         return unitPrice;
     }
+
+    public UUID getSourceOfferId() { return sourceOfferId; }
+    public String getCardConditionSnapshot() { return cardConditionSnapshot; }
+    public long getShippingFeeSnapshot() { return shippingFeeSnapshot; }
+    public String getPrimaryImageStorageKey() { return primaryImageStorageKey; }
 }

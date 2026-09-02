@@ -8,6 +8,18 @@ public record ListingSnapshot(
         UUID cardVariantId,
         String title,
         long price,
-        long shippingFee
+        long shippingFee,
+        String cardCondition,
+        String primaryImageStorageKey
 ) {
+    public ListingSnapshot(
+            UUID id,
+            UUID sellerId,
+            UUID cardVariantId,
+            String title,
+            long price,
+            long shippingFee
+    ) {
+        this(id, sellerId, cardVariantId, title, price, shippingFee, "MINT", null);
+    }
 }

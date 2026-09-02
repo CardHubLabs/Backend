@@ -12,8 +12,11 @@ public interface FavoriteRepository extends JpaRepository<Favorite, UUID> {
 
     boolean existsByUserIdAndListingId(UUID userId, UUID listingId);
 
+    boolean existsByUserIdAndCardVariantId(UUID userId, UUID cardVariantId);
+
     Optional<Favorite> findByUserIdAndListingId(UUID userId, UUID listingId);
+
+    Optional<Favorite> findByUserIdAndCardVariantId(UUID userId, UUID cardVariantId);
 
     Page<Favorite> findAllByUserId(UUID userId, Pageable pageable);
 }
-

@@ -108,11 +108,27 @@ public class TossPaymentGateway implements PaymentGateway {
         }
     }
 
-    private PaymentGatewayResult map(TossPaymentResponse response) {
+    PaymentGatewayResult map(TossPaymentResponse response) {
         if (response == null || response.status() == null) {
             return PaymentGatewayResult.unknown("TOSS_EMPTY_RESPONSE");
         }
-        return classifyProviderStatus(response.status(), response.approvedAt(), response.balanceAmount());
+        if ("DONE".equals(response.status()) || "APPROVED".equals(response.status())) {
+            return PaymentGatewayResult.providerApproved(
+                    response.status(), parseInstant(response.approvedAt()),
+                    response.paymentKey(), response.orderId(), response.totalAmount(),
+                    response.method(), response.easyPay() == null ? null : response.easyPay().provider(),
+                    response.status()
+            );
+        }
+        PaymentGatewayResult classified = classifyProviderStatus(
+                response.status(), response.approvedAt(), response.balanceAmount());
+        if (classified.status() == ResultStatus.UNKNOWN) {
+            return PaymentGatewayResult.providerUnknown(
+                    classified.providerCode(), response.paymentKey(), response.orderId(),
+                    response.totalAmount(), response.method(),
+                    response.easyPay() == null ? null : response.easyPay().provider(), response.status());
+        }
+        return classified;
     }
 
     PaymentGatewayResult classifyProviderStatus(String status, String approvedAt, Long balanceAmount) {
@@ -145,9 +161,12 @@ public class TossPaymentGateway implements PaymentGateway {
 
     private PaymentGatewayResult mapLookupFailure(RestClientResponseException exception) {
         String code = providerCode(exception.getResponseBodyAsString());
-        HttpStatusCode status = exception.getStatusCode();
-        if (status.value() == 404 || "NOT_FOUND_PAYMENT".equals(code)) {
-            return PaymentGatewayResult.declined(code);
+        return classifyLookupFailure(exception.getStatusCode().value(), code);
+    }
+
+    PaymentGatewayResult classifyLookupFailure(int httpStatus, String code) {
+        if (httpStatus == 404 || "NOT_FOUND_PAYMENT".equals(code)) {
+            return PaymentGatewayResult.unknown(code);
         }
         return PaymentGatewayResult.unknown(code);
     }
@@ -197,6 +216,21 @@ public class TossPaymentGateway implements PaymentGateway {
     private record CancelBody(String cancelReason, long cancelAmount) {
     }
 
-    record TossPaymentResponse(String status, String approvedAt, Long balanceAmount) {
+    record TossPaymentResponse(
+            String paymentKey,
+            String orderId,
+            Long totalAmount,
+            String method,
+            TossEasyPay easyPay,
+            String status,
+            String approvedAt,
+            Long balanceAmount
+    ) {
+        TossPaymentResponse(String status, String approvedAt, Long balanceAmount) {
+            this(null, null, null, null, null, status, approvedAt, balanceAmount);
+        }
+    }
+
+    record TossEasyPay(String provider) {
     }
 }
