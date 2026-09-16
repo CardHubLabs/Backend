@@ -46,6 +46,7 @@ public class PriceAlertService {
     }
 
     @Transactional
+    @Deprecated(since = "v1", forRemoval = false)
     public PriceAlert create(UUID userId, UUID listingId, Integer requestedThreshold) {
         UUID variantId = listingPriceReader.activeListingVariant(listingId).orElse(listingId);
         validateCreation(userId, variantId, listingId);

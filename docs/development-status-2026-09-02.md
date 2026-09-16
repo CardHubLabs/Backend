@@ -6,10 +6,10 @@
 |---|---|
 | 대상 저장소 | CardHub Spring Boot Backend |
 | 작업 브랜치 | `feat/backend-mvp` |
-| 구현 기준 | 승인된 `CardHub Figma 대조 후 MVP 보완 계획` |
+| 구현 기준 | 승인된 `CardHub Figma 대조 후 MVP 보완 계획` 및 `API 상태·감사·문서화 보완 계획` |
 | DB 기준 | PostgreSQL 16, Flyway V001~V023 |
-| 최종 로컬 검증 | 2026-09-01 KST, Docker PostgreSQL을 포함한 `./gradlew check` |
-| 현재 판정 | 기능 보완 코드는 구현·테스트 통과, 출시 Definition of Done은 미완료 |
+| 최종 로컬 검증 | 2026-09-02 KST, Docker PostgreSQL을 포함한 `./gradlew check --no-daemon` |
+| 현재 판정 | API 상태·감사·OpenAPI 보완 코드와 자동 테스트 통과, 출시 Definition of Done은 미완료 |
 | Git 상태 | 변경사항은 working tree에 있으며 아직 커밋·push하지 않음 |
 
 이 문서는 2026-08-25 기준 기록인
@@ -29,6 +29,10 @@ Figma 기능·상태 보드 및 ERD 대조 보완 작업을 정리한다.
 - SweetTracker 택배사 목록 동기화와 활성 택배사 코드 검증
 - 화면용 배송 준비·자동확정 파생 상태
 - 관리자 결제 상세 및 복구 작업 등록 경로
+- lifecycle과 moderation을 합성한 비영속 `effectiveStatus`
+- 관리자 카탈로그 변경 9종의 구조화 감사 로그
+- legacy 경로·필드의 Java/OpenAPI 폐기 예정 표시
+- 변경 영역 중심 OpenAPI 설명·오류 상태·비민감 예시와 계약 테스트
 
 기존 Flyway V001~V015는 수정하지 않았고 V016~V023만 추가했다. 빈 DB 전체
 migration과 V015 데이터가 있는 DB의 upgrade migration을 모두 실제 PostgreSQL로
@@ -188,6 +192,51 @@ migration과 V015 데이터가 있는 DB의 upgrade migration을 모두 실제 P
 - 주문 응답의 배송·자동확정 파생값은 Shipment projection으로 계산한다.
 - 배송 추적 polling, 정규화, provider event 중복 제거와 역순 방어는 기존 경로를 유지한다.
 
+### 4.8 API 상태·감사·문서화 보완
+
+#### 매물 `effectiveStatus`
+
+- DB `ListingStatus`와 migration은 변경하지 않고 비영속 `ListingEffectiveStatus`를 추가했다.
+- 값은 `ACTIVE`, `HIDDEN`, `RESERVED`, `SOLD`, `DELETED`, `BLOCKED` 여섯 개다.
+- `moderationStatus=BLOCKED`이면 lifecycle과 관계없이 `BLOCKED`가 우선한다.
+- 차단되지 않은 매물은 lifecycle `status`를 같은 이름의 effective 상태로 변환한다.
+- 공개 검색, 내 매물, 매물 상세와 관리자 매물 응답에 `effectiveStatus`를 추가했다.
+- 기존 `status`와 `moderationStatus`는 호환을 위해 그대로 유지한다.
+
+#### 관리자 카탈로그 감사 로그
+
+- 게임·세트·카드·Variant 생성·수정 8종과 Variant listability 변경 1종에
+  인증된 `adminId` 전달을 강제했다.
+- 성공한 변경은 기존 `CARDHUB_ADMIN_AUDIT` logger에 정확히 한 번 기록한다.
+- 공통 필드는 `actorId`, `action`, `targetId`이며 listability 변경만 최종
+  `listable` 값을 추가한다.
+- 이름, 이미지 URL, 요청 본문과 민감정보는 기록하지 않는다.
+- actor 없는 mutation overload를 제거해 감사 로그 우회 경로를 차단했다.
+- 중복 slug나 없는 대상 등 실패한 변경에는 감사 로그를 남기지 않는다.
+
+#### Legacy 호환·폐기 예정 정책
+
+- 다음 handler에 Java `@Deprecated(since="v1", forRemoval=false)`와 OpenAPI
+  `deprecated=true`를 함께 적용했다.
+  - `POST /api/v1/admin/listings/{listingId}/hide`
+  - `POST /api/v1/favorites/{listingId}`
+  - `DELETE /api/v1/favorites/{listingId}`
+- 가격 알림의 `listingId`, 주문의 문자열 `shippingAddress`, 관심 응답의
+  `listingId`는 property만 폐기 예정으로 표시하고 대체 필드를 설명했다.
+- 가격 알림과 주문 생성 operation 자체는 현행 혼합 호환 API이므로 deprecated 처리하지 않았다.
+- 호환 서비스 overload와 legacy request 생성자에도 Java `@Deprecated`를 적용했다.
+- 런타임 `Deprecation`/`Sunset` 헤더와 제거 버전·날짜는 이번 변경에 추가하지 않았다.
+
+#### OpenAPI
+
+- Catalog, Listing, Admin, Favorite, Price Alert, Order, Payment, Shipping에 tag를 추가했다.
+- 변경 API의 summary, description, 실제 성공 상태, 주요 오류와 비민감 예시를 추가했다.
+- 공개 Catalog GET과 매물 검색·상세는 operation security를 빈 배열로 재정의했다.
+- 보호 API는 전역 `bearerAuth`를 유지하며 `@CurrentUserId` 내부 파라미터는 문서에서 숨겼다.
+- `ListingSummary`, `ListingDetail`, `AdminListingResponse` schema를 고유 이름으로 노출한다.
+- `/v3/api-docs` 계약 테스트로 deprecation, schema, enum, 보안, 응답 코드와 예시를 검증한다.
+- Production의 `OPENAPI_ENABLED` 동작은 변경하지 않았다.
+
 ## 5. 변경된 주요 API
 
 ### 신규·확장 API
@@ -215,15 +264,14 @@ migration과 V015 데이터가 있는 DB의 upgrade migration을 모두 실제 P
 - 가격 알림 생성 요청의 `listingId`
 - 주문 요청의 문자열 `shippingAddress`
 - 관리자 `POST /api/v1/admin/listings/{listingId}/hide`
+- 관심·가격 알림 응답의 legacy `listingId`
+- 주문 상세 응답의 legacy 문자열 `shippingAddress`
 
-legacy 경로는 한 릴리스 후 제거 여부를 별도로 결정한다.
+legacy 경로·필드는 최소 한 릴리스 동안 유지한다. 제거 버전과 날짜는 아직 정하지 않았으며,
+operation 전체 또는 property 수준의 OpenAPI deprecation으로 구분해 표시한다.
 
 ### 현재 구현과 계획 간 알려진 차이
 
-- 계획의 계산형 단일 `effectiveStatus=BLOCKED` 필드는 아직 응답에 없다. 현재 API는
-  lifecycle `status`와 `moderationStatus`를 분리해 제공한다.
-- legacy 관리자 `/hide`, listing 기반 관심·가격 알림 경로는 동작하지만 코드에
-  `@Deprecated` 표시는 아직 추가하지 않았다.
 - 구조화 주소 request 필드명은 일반 `shippingAddress` 객체가 아니라
   `shippingAddressSnapshot`이다.
 - SweetTracker callback 수신 경로는 계약상 callback 사용이 확정되지 않아 구현하지
@@ -250,12 +298,23 @@ TESTCONTAINERS_RYUK_DISABLED=true \
 | 항목 | 결과 |
 |---|---|
 | Gradle `check` | `BUILD SUCCESSFUL` |
-| 전체 테스트 | 107 |
-| 통과 | 107 |
+| 전체 테스트 | 123 |
+| 통과 | 123 |
 | 실패 | 0 |
 | 오류 | 0 |
 | skip | 0 |
 | `git diff --check` | 경고 없음 |
+
+추가된 핵심 자동 검증:
+
+- `effectiveStatus` lifecycle 5종 mapping과 BLOCKED 우선순위
+- unblock 후 lifecycle 복귀, 공개 차단 매물 404, 내 매물·관리자 응답 projection
+- 관리자 카탈로그 mutation 9종의 actor/action/target 및 실패 시 무기록
+- JWT subject UUID의 카탈로그 서비스 전달
+- `/v3/api-docs`의 legacy operation·property deprecation
+- Listing 응답 3종의 `effectiveStatus` enum 6개
+- 공개 API의 빈 security와 보호 API의 전역 bearer 인증
+- 변경 API tag·설명·성공/오류 상태·비민감 예시
 
 ### 6.2 PostgreSQL 필수 검증
 
@@ -270,8 +329,8 @@ TESTCONTAINERS_RYUK_DISABLED=true \
 
 | 범위 | Line | Branch |
 |---|---:|---:|
-| 전체 코드 | 44.8% | 31.2% |
-| 핵심 domain/application | 47.0% | 34.5% |
+| 전체 코드 | 50.6% | 33.9% |
+| 핵심 domain/application | 54.6% | 37.8% |
 
 계획 목표인 핵심 domain/application branch 85%에는 아직 도달하지 못했다.
 `check`는 리포트를 생성하지만 현재 coverage 실패 gate를 강제하지 않는다.
@@ -308,7 +367,8 @@ TESTCONTAINERS_RYUK_DISABLED=true \
 
 ### P1 — 품질·운영
 
-- [ ] 변경 API의 OpenAPI 설명·예시 보강
+- [ ] 전체 `/api/v1`의 OpenAPI 설명·예시를 동일 수준으로 확장
+- [ ] Variant rarity·`legacyVariantRarity`의 별도 호환 종료 정책 확정
 - [ ] Toss·SweetTracker WireMock contract suite
 - [ ] 공개 API·webhook rate limiting
 - [ ] dependency·secret scan
@@ -343,6 +403,9 @@ git diff --stat
 ## 10. 완료 기준
 
 현재 완료된 것은 **Figma 대조 보완 기능 코드와 로컬 자동 테스트**다.
+
+이번 후속 범위인 `effectiveStatus`, 카탈로그 감사 로그, legacy deprecation과 변경 영역
+OpenAPI는 구현 및 계약 테스트까지 완료했다. SweetTracker callback은 계획대로 보류했다.
 
 Production 출시 완료로 판단하려면 다음 조건이 모두 필요하다.
 

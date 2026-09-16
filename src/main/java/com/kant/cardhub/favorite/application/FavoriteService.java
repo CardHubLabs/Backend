@@ -53,6 +53,7 @@ public class FavoriteService {
     }
 
     @Transactional
+    @Deprecated(since = "v1", forRemoval = false)
     public Favorite add(UUID userId, UUID listingId) {
         activeUserLock.requireActive(userId);
         UUID variantId = resolveLegacyListingVariant(listingId);
@@ -85,6 +86,7 @@ public class FavoriteService {
     }
 
     @Transactional
+    @Deprecated(since = "v1", forRemoval = false)
     public void remove(UUID userId, UUID listingId) {
         UUID variantId = resolveLegacyListingVariant(listingId);
         removeVariant(userId, variantId);

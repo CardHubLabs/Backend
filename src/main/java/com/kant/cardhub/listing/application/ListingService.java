@@ -207,7 +207,8 @@ public class ListingService {
         return new ListingView.Detail(
                 listing.getId(), listing.getSellerId(), listing.getCardVariantId(), listing.getCardCondition(),
                 listing.getDescription(), listing.getPrice(), listing.getShippingFee(), listing.getStatus(),
-                listing.getModerationStatus(), listing.getBlockedAt(), listing.getBlockedReason(),
+                listing.getModerationStatus(), listing.getEffectiveStatus(), listing.getBlockedAt(),
+                listing.getBlockedReason(),
                 images.stream().map(this::toImage).toList(), listing.getCreatedAt(), listing.getUpdatedAt()
         );
     }
@@ -216,7 +217,8 @@ public class ListingService {
         return new ListingView.Summary(
                 listing.getId(), listing.getSellerId(), listing.getCardVariantId(), listing.getCardCondition(),
                 listing.getPrice(), listing.getShippingFee(), listing.getStatus(),
-                listing.getModerationStatus(), listing.getBlockedAt(), listing.getBlockedReason(),
+                listing.getModerationStatus(), listing.getEffectiveStatus(), listing.getBlockedAt(),
+                listing.getBlockedReason(),
                 primaryImage == null ? null : objectStorage.publicUrl(primaryImage.getStorageKey()),
                 listing.getCreatedAt()
         );

@@ -4,6 +4,7 @@ import com.kant.cardhub.admin.application.AdminService;
 import com.kant.cardhub.common.api.ApiResponse;
 import com.kant.cardhub.common.security.CurrentUserId;
 import com.kant.cardhub.listing.domain.Listing;
+import com.kant.cardhub.listing.domain.ListingEffectiveStatus;
 import com.kant.cardhub.listing.domain.ListingModerationStatus;
 import com.kant.cardhub.listing.domain.ListingStatus;
 import com.kant.cardhub.order.domain.Order;
@@ -16,6 +17,9 @@ import com.kant.cardhub.user.domain.User;
 import com.kant.cardhub.user.domain.UserRole;
 import com.kant.cardhub.user.domain.UserStatus;
 import com.kant.cardhub.trade.domain.Trade;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -37,6 +41,7 @@ import java.util.function.Function;
 
 @RestController
 @RequestMapping("/api/v1/admin")
+@Tag(name = "Admin", description = "관리자 제재, 결제 복구와 운영 조회 API")
 public class AdminController {
 
     private final AdminService adminService;
@@ -64,6 +69,18 @@ public class AdminController {
     }
 
     @PostMapping("/listings/{listingId}/hide")
+    @Deprecated(since = "v1", forRemoval = false)
+    @Operation(
+            summary = "관리자 매물 숨김 (legacy)",
+            description = "호환용 API입니다. legacy 사유로 moderation 차단을 수행합니다. "
+                    + "신규 운영 도구는 POST /admin/listings/{listingId}/block과 필수 사유를 사용해야 합니다.",
+            deprecated = true,
+            responses = {
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "legacy 차단 완료"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "매물을 찾을 수 없음"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 차단된 매물")
+            }
+    )
     public ApiResponse<Void> hideListing(
             @CurrentUserId UUID adminId,
             @PathVariable UUID listingId
@@ -73,6 +90,17 @@ public class AdminController {
     }
 
     @PostMapping("/listings/{listingId}/block")
+    @Operation(
+            summary = "관리자 매물 차단",
+            description = "판매 lifecycle과 독립된 moderation을 BLOCKED로 전환합니다. ACTIVE 매물은 HIDDEN으로 "
+                    + "바꾸고 열린 제안과 장바구니 노출을 정리하지만 결제 중 RESERVED 예약은 유지합니다.",
+            responses = {
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "매물 차단 완료"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "차단 사유 누락 또는 길이 오류"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "매물을 찾을 수 없음"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 차단된 매물")
+            }
+    )
     public ApiResponse<Void> blockListing(
             @CurrentUserId UUID adminId,
             @PathVariable UUID listingId,
@@ -83,6 +111,15 @@ public class AdminController {
     }
 
     @PostMapping("/listings/{listingId}/unblock")
+    @Operation(
+            summary = "관리자 매물 차단 해제",
+            description = "moderation만 CLEAR로 복구합니다. lifecycle이 HIDDEN이면 판매자가 별도로 활성화해야 합니다.",
+            responses = {
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "매물 차단 해제 완료"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "매물을 찾을 수 없음"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "차단되지 않은 매물")
+            }
+    )
     public ApiResponse<Void> unblockListing(
             @CurrentUserId UUID adminId,
             @PathVariable UUID listingId
@@ -149,6 +186,12 @@ public class AdminController {
     }
 
     @GetMapping("/listings")
+    @Operation(
+            summary = "관리자 매물 목록 조회",
+            description = "lifecycle status와 moderationStatus를 보존하고 BLOCKED 우선 규칙의 effectiveStatus를 함께 반환합니다.",
+            responses = @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "관리자 매물 목록 조회 성공", useReturnTypeSchema = true)
+    )
     public ApiResponse<PagePayload<ListingResponse>> listings(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
@@ -173,11 +216,32 @@ public class AdminController {
     }
 
     @GetMapping("/payments/{paymentId}")
+    @Operation(
+            summary = "관리자 결제 상세 조회",
+            description = "UNKNOWN 복구 메타데이터, 공급자 상태, 확인 시도 횟수와 수동 검토 여부를 조회합니다. "
+                    + "결제 키와 민감 원문은 응답하지 않습니다.",
+            responses = {
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                            responseCode = "200", description = "결제 상세 조회 성공", useReturnTypeSchema = true),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "결제를 찾을 수 없음")
+            }
+    )
     public ApiResponse<PaymentResponse> payment(@PathVariable UUID paymentId) {
         return ApiResponse.success(PaymentResponse.from(adminService.payment(paymentId)));
     }
 
     @PostMapping("/payments/{paymentId}/reconcile")
+    @Operation(
+            summary = "관리자 결제 재조회 작업 등록",
+            description = "UNKNOWN 결제를 같은 멱등 키로 재확인하고 공급자 조회로 검증하는 작업을 등록합니다. "
+                    + "관리자가 APPROVED 상태를 강제로 지정하지는 않습니다.",
+            responses = {
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                            responseCode = "200", description = "재조회 작업 등록 완료", useReturnTypeSchema = true),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "결제를 찾을 수 없음"),
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "재조회 대상이 아닌 결제 상태 또는 중복 작업")
+            }
+    )
     public ApiResponse<PaymentReconcileResponse> reconcilePayment(
             @CurrentUserId UUID adminId,
             @PathVariable UUID paymentId
@@ -218,6 +282,7 @@ public class AdminController {
         }
     }
 
+    @Schema(name = "AdminListingResponse", description = "관리자용 lifecycle·moderation 포함 매물 응답")
     public record ListingResponse(
             UUID id,
             UUID sellerId,
@@ -226,6 +291,12 @@ public class AdminController {
             long shippingFee,
             ListingStatus status,
             ListingModerationStatus moderationStatus,
+            @Schema(
+                    description = "moderation BLOCKED가 lifecycle보다 우선하며, 그 외에는 status와 동일한 유효 상태",
+                    allowableValues = {"ACTIVE", "HIDDEN", "RESERVED", "SOLD", "DELETED", "BLOCKED"},
+                    example = "BLOCKED"
+            )
+            ListingEffectiveStatus effectiveStatus,
             Instant blockedAt,
             UUID blockedBy,
             String blockedReason,
@@ -235,13 +306,17 @@ public class AdminController {
             return new ListingResponse(
                     listing.getId(), listing.getSellerId(), listing.getCardVariantId(),
                     listing.getPrice(), listing.getShippingFee(), listing.getStatus(),
-                    listing.getModerationStatus(), listing.getBlockedAt(), listing.getBlockedBy(),
+                    listing.getModerationStatus(), listing.getEffectiveStatus(), listing.getBlockedAt(),
+                    listing.getBlockedBy(),
                     listing.getBlockedReason(), listing.getCreatedAt()
             );
         }
     }
 
-    public record BlockListingRequest(@NotBlank @Size(max = 500) String reason) {
+    public record BlockListingRequest(
+            @Schema(description = "운영자 차단 사유", example = "카탈로그 정보와 다른 상품 이미지 사용")
+            @NotBlank @Size(max = 500) String reason
+    ) {
     }
 
     public record OrderResponse(

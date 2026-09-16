@@ -53,6 +53,7 @@ public class OrderApplicationService {
     }
 
     @Transactional
+    @Deprecated(since = "v1", forRemoval = false)
     public Order create(UUID buyerId, List<UUID> requestedListingIds, String shippingAddress) {
         return createInternal(buyerId, requestedListingIds, requireLegacyAddress(shippingAddress), (short) 1, null);
     }
@@ -68,6 +69,7 @@ public class OrderApplicationService {
     }
 
     @Transactional
+    @Deprecated(since = "v1", forRemoval = false)
     public Order createSingle(
             UUID buyerId,
             UUID listingId,

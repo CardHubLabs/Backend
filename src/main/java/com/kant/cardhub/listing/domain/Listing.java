@@ -126,6 +126,18 @@ public class Listing {
     public long getShippingFee() { return shippingFee; }
     public ListingStatus getStatus() { return status; }
     public ListingModerationStatus getModerationStatus() { return moderationStatus; }
+    public ListingEffectiveStatus getEffectiveStatus() {
+        if (moderationStatus == ListingModerationStatus.BLOCKED) {
+            return ListingEffectiveStatus.BLOCKED;
+        }
+        return switch (status) {
+            case ACTIVE -> ListingEffectiveStatus.ACTIVE;
+            case HIDDEN -> ListingEffectiveStatus.HIDDEN;
+            case RESERVED -> ListingEffectiveStatus.RESERVED;
+            case SOLD -> ListingEffectiveStatus.SOLD;
+            case DELETED -> ListingEffectiveStatus.DELETED;
+        };
+    }
     public Instant getBlockedAt() { return blockedAt; }
     public UUID getBlockedBy() { return blockedBy; }
     public String getBlockedReason() { return blockedReason; }

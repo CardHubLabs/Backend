@@ -4,6 +4,7 @@ import com.kant.cardhub.common.error.BusinessException;
 import com.kant.cardhub.common.error.ErrorCode;
 import com.kant.cardhub.shipment.domain.ShippingCarrier;
 import com.kant.cardhub.shipment.infrastructure.ShippingCarrierRepository;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.kant.cardhub.shipment.infrastructure.SweetTrackerProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,7 +49,10 @@ public class ShippingCarrierService {
         return value == null || value.isBlank() ? "stub" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    public record CarrierView(String code, String displayName) {
+    public record CarrierView(
+            @Schema(description = "배송조회 공급자 택배사 코드", example = "04") String code,
+            @Schema(description = "사용자에게 표시할 택배사명", example = "CJ대한통운") String displayName
+    ) {
         static CarrierView from(ShippingCarrier carrier) {
             return new CarrierView(carrier.getCode(), carrier.getDisplayName());
         }

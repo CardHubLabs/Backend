@@ -14,6 +14,8 @@ import com.kant.cardhub.catalog.infrastructure.CardSetRepository;
 import com.kant.cardhub.catalog.infrastructure.CardVariantRepository;
 import com.kant.cardhub.common.error.BusinessException;
 import com.kant.cardhub.common.error.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,8 @@ import java.util.UUID;
 @Service
 @Transactional(readOnly = true)
 public class CatalogService {
+
+    private static final Logger audit = LoggerFactory.getLogger("CARDHUB_ADMIN_AUDIT");
 
     private final CardGameRepository gameRepository;
     private final CardSetRepository setRepository;
@@ -138,37 +142,41 @@ public class CatalogService {
     }
 
     @Transactional
-    public CatalogView.Game createGame(String name, String slug) {
-        return createGame(name, slug, GameCode.fromLegacySlug(slug));
-    }
-
-    @Transactional
-    public CatalogView.Game createGame(String name, String slug, GameCode code) {
+    public CatalogView.Game createGame(UUID adminId, String name, String slug, GameCode code) {
         if (gameRepository.findBySlug(slug.trim().toLowerCase(Locale.ROOT)).isPresent()) {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 사용 중인 게임 slug입니다.");
         }
         if (gameRepository.findByCode(code).isPresent()) {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 사용 중인 게임 code입니다.");
         }
-        return toGame(gameRepository.save(CardGame.create(name, slug, code, clock.instant())));
+        CatalogView.Game result = toGame(gameRepository.save(CardGame.create(name, slug, code, clock.instant())));
+        log(adminId, "CATALOG_GAME_CREATE", result.id());
+        return result;
     }
 
     @Transactional
-    public CatalogView.Set createSet(UUID gameId, String name, String code, LocalDate releasedAt) {
+    public CatalogView.Set createSet(UUID adminId, UUID gameId, String name, String code, LocalDate releasedAt) {
         requireGame(gameId);
-        return toSet(setRepository.save(CardSet.create(gameId, name, code, releasedAt, clock.instant())));
+        CatalogView.Set result = toSet(
+                setRepository.save(CardSet.create(gameId, name, code, releasedAt, clock.instant()))
+        );
+        log(adminId, "CATALOG_SET_CREATE", result.id());
+        return result;
     }
 
     @Transactional
-    public CatalogView.Game updateGame(UUID gameId, String name, String slug, GameCode code) {
+    public CatalogView.Game updateGame(UUID adminId, UUID gameId, String name, String slug, GameCode code) {
         CardGame game = gameRepository.findById(gameId)
                 .orElseThrow(() -> notFound("카드 게임을 찾을 수 없습니다."));
         game.update(name, slug, code, clock.instant());
-        return toGame(game);
+        CatalogView.Game result = toGame(game);
+        log(adminId, "CATALOG_GAME_UPDATE", result.id());
+        return result;
     }
 
     @Transactional
     public CatalogView.Set updateSet(
+            UUID adminId,
             UUID setId,
             UUID gameId,
             String name,
@@ -179,11 +187,14 @@ public class CatalogService {
         CardSet set = setRepository.findById(setId)
                 .orElseThrow(() -> notFound("카드 세트를 찾을 수 없습니다."));
         set.update(gameId, name, code, releasedAt, clock.instant());
-        return toSet(set);
+        CatalogView.Set result = toSet(set);
+        log(adminId, "CATALOG_SET_UPDATE", result.id());
+        return result;
     }
 
     @Transactional
     public CatalogView.CardSummary updateCard(
+            UUID adminId,
             UUID cardId,
             UUID setId,
             String name,
@@ -199,16 +210,14 @@ public class CatalogService {
         Card card = cardRepository.findById(cardId)
                 .orElseThrow(() -> notFound("카드를 찾을 수 없습니다."));
         card.update(setId, name, cardNumber, nameKo, nameEn, nameJa, rarity, clock.instant());
-        return toCardSummary(card);
-    }
-
-    @Transactional
-    public CatalogView.CardSummary createCard(UUID setId, String name, String cardNumber) {
-        return createCard(setId, name, cardNumber, null, null, null, null);
+        CatalogView.CardSummary result = toCardSummary(card);
+        log(adminId, "CATALOG_CARD_UPDATE", result.id());
+        return result;
     }
 
     @Transactional
     public CatalogView.CardSummary createCard(
+            UUID adminId,
             UUID setId,
             String name,
             String cardNumber,
@@ -218,20 +227,16 @@ public class CatalogService {
             String rarity
     ) {
         if (!setRepository.existsById(setId)) throw notFound("카드 세트를 찾을 수 없습니다.");
-        return toCardSummary(cardRepository.save(Card.create(
+        CatalogView.CardSummary result = toCardSummary(cardRepository.save(Card.create(
                 setId, name, cardNumber, nameKo, nameEn, nameJa, rarity, clock.instant()
         )));
+        log(adminId, "CATALOG_CARD_CREATE", result.id());
+        return result;
     }
 
     @Transactional
     public CatalogView.Variant createVariant(
-            UUID cardId, String language, String version, String rarity, String imageUrl
-    ) {
-        return createVariant(cardId, language, version, rarity, imageUrl, null, null, null);
-    }
-
-    @Transactional
-    public CatalogView.Variant createVariant(
+            UUID adminId,
             UUID cardId,
             String language,
             String version,
@@ -246,17 +251,20 @@ public class CatalogService {
         PrintType normalizedPrintType = printType == null
                 ? inferLegacyPrintType(version, rarity)
                 : printType;
-        return toVariant(variantRepository.save(
+        CatalogView.Variant result = toVariant(variantRepository.save(
                 CardVariant.create(
                         cardId, language, version, rarity, imageUrl,
                         normalizedVersionType, normalizedPrintType,
                         listable == null || listable, clock.instant()
                 )
         ));
+        log(adminId, "CATALOG_VARIANT_CREATE", result.id());
+        return result;
     }
 
     @Transactional
     public CatalogView.Variant updateVariant(
+            UUID adminId,
             UUID variantId,
             String language,
             String version,
@@ -270,14 +278,21 @@ public class CatalogService {
         variant.update(
                 language, version, rarity, imageUrl, versionType, printType, listable, clock.instant()
         );
-        return toVariant(variant);
+        CatalogView.Variant result = toVariant(variant);
+        log(adminId, "CATALOG_VARIANT_UPDATE", result.id());
+        return result;
     }
 
     @Transactional
-    public CatalogView.Variant setVariantListable(UUID variantId, boolean listable) {
+    public CatalogView.Variant setVariantListable(UUID adminId, UUID variantId, boolean listable) {
         CardVariant variant = requireVariant(variantId);
         variant.setListable(listable, clock.instant());
-        return toVariant(variant);
+        CatalogView.Variant result = toVariant(variant);
+        audit.info(
+                "actorId={} action=CATALOG_VARIANT_LISTABILITY_UPDATE targetId={} listable={}",
+                adminId, result.id(), result.listable()
+        );
+        return result;
     }
 
     private void requireGame(UUID id) {
@@ -317,6 +332,10 @@ public class CatalogService {
 
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private void log(UUID adminId, String action, UUID targetId) {
+        audit.info("actorId={} action={} targetId={}", adminId, action, targetId);
     }
 
     private static String normalizeUpper(String value) {
