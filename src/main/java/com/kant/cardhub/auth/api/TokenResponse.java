@@ -10,7 +10,7 @@ public record TokenResponse(
         Instant expiresAt
 ) {
 
-    static TokenResponse from(AuthTokens tokens) {
+    public static TokenResponse from(AuthTokens tokens) {
         return new TokenResponse("Bearer", tokens.accessToken(), tokens.accessTokenExpiresAt());
     }
 }

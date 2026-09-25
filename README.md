@@ -39,6 +39,18 @@ OAuth를 실제로 확인할 때만 각 provider의 callback URI와 자격증명
 `local,oauth` 프로필을 사용합니다. 토큰이나 외부 서비스 키를 저장소에
 커밋하지 마세요.
 
+Google 로컬 연동에는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`과
+`SPRING_PROFILES_ACTIVE=local,oauth`가 필요합니다. Google Console의 redirect
+URI는 `http://localhost:8080/login/oauth2/code/google`이며, 프론트 성공 URL의
+기본값은 `http://localhost:3000/auth/callback`입니다. 인증 흐름, 세션 계약과
+기존 계정 재로그인 수정은
+[`docs/google-oauth-integration.md`](docs/google-oauth-integration.md)에 정리되어
+있습니다.
+
+기본 허용 frontend origin은 `http://localhost:3000`입니다. Vite 등 다른 포트를
+사용하거나 origin이 여러 개라면 `CORS_ALLOWED_ORIGINS`에 쉼표로 구분해
+명시하고, 브라우저 요청에는 credentials를 포함해야 합니다.
+
 ## 검증
 
 ```bash

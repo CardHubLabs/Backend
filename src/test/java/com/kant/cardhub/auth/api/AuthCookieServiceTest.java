@@ -3,6 +3,7 @@ package com.kant.cardhub.auth.api;
 import com.kant.cardhub.auth.config.AuthProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.time.Duration;
@@ -48,5 +49,23 @@ class AuthCookieServiceTest {
                 .contains("Secure")
                 .contains("HttpOnly")
                 .contains("SameSite=Lax");
+    }
+
+    @Test
+    void readsOnlyTheConfiguredRefreshCookie() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(
+                new jakarta.servlet.http.Cookie("another_cookie", "ignored"),
+                new jakarta.servlet.http.Cookie("cardhub_refresh", "opaque-refresh-token")
+        );
+
+        assertThat(cookieService.readRefreshToken(request)).isEqualTo("opaque-refresh-token");
+    }
+
+    @Test
+    void returnsNullWhenTheRefreshCookieIsMissing() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        assertThat(cookieService.readRefreshToken(request)).isNull();
     }
 }

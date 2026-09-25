@@ -45,7 +45,6 @@ public class SecurityConfiguration {
         csrfRepository.setCookiePath("/");
         CsrfTokenRequestAttributeHandler csrfHandler = new CsrfTokenRequestAttributeHandler();
         csrfHandler.setCsrfRequestAttributeName("_csrf");
-
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf
@@ -55,7 +54,10 @@ public class SecurityConfiguration {
                             String method = request.getMethod();
                             boolean unsafe = !("GET".equals(method) || "HEAD".equals(method)
                                     || "TRACE".equals(method) || "OPTIONS".equals(method));
-                            if (!unsafe || request.getCookies() == null) {
+                            if (!unsafe) {
+                                return false;
+                            }
+                            if (request.getCookies() == null) {
                                 return false;
                             }
                             for (Cookie cookie : request.getCookies()) {

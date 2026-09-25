@@ -18,7 +18,7 @@ services:
   api:
     build: .
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: ${API_SPRING_PROFILES_ACTIVE:-local}
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cardhub}
       DB_USERNAME: ${POSTGRES_USER:-cardhub}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-cardhub}

@@ -177,7 +177,7 @@ coverage도 35.1%로 계획 목표 85%에 미달한다. 따라서 현재 상태�
 - Compose DB는 로컬 포트 충돌을 피하도록 `POSTGRES_PORT=5433`으로 띄워야 한다.
 - 기본 Compose API는 `local`만 활성화하므로 OAuth 로그인이 꺼져 있다.
 - 비밀번호 로그인이나 dev token endpoint가 없어 보호 API 수동 테스트에는
-  실제 OAuth 또는 prod에 절대 포함되지 않는 `local-dev` bootstrap이 필요하다.
+  실제 OAuth 테스트 계정이 필요하다.
 - 실제 OAuth, Toss, SweetTracker, AWS credential이 없어 Staging 왕복을
   수행하지 않았다.
 
@@ -206,9 +206,8 @@ coverage도 35.1%로 계획 목표 85%에 미달한다. 따라서 현재 상태�
 
 #### P0-3. 보호 API 수동 테스트 경로
 
-- [ ] 실제 OAuth만 쓸지 `local-dev` user/JWT bootstrap을 만들지 결정
-- [ ] local-dev 사용 시 prod context에 bean·endpoint가 없음을 테스트
-- [ ] seller, buyer, admin fixture 준비
+- [ ] 실제 OAuth 테스트 계정으로 세션 발급 경로 검증
+- [ ] seller, buyer, admin 역할별 테스트 데이터 준비
 - [ ] Swagger/Postman smoke collection 작성
 
 완료 조건: 비밀정보 없이 매물 → 주문 → 결제 → 배송 → 확정 흐름을 반복한다.
@@ -308,7 +307,7 @@ coverage도 35.1%로 계획 목표 85%에 미달한다. 따라서 현재 상태�
 
 1. working tree 검토와 기준 커밋
 2. Docker PostgreSQL에서 migration·동시성 테스트를 skip 없이 실행
-3. `local-dev` 수동 테스트 경로 또는 실제 OAuth Staging 연결
+3. 실제 OAuth Staging 연결
 4. seller → listing → buyer order → payment → shipment → confirm smoke
 5. OAuth·S3/KMS·Toss·SweetTracker 실제 adapter 검증
 6. 핵심 상태 전이 테스트와 coverage 확대
