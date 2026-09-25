@@ -5,6 +5,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
 
@@ -23,6 +25,18 @@ public class AuthCookieService {
 
     public void clear(HttpServletResponse response) {
         response.addHeader(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString());
+    }
+
+    public String readRefreshToken(HttpServletRequest request) {
+        if (request.getCookies() == null) {
+            return null;
+        }
+        for (Cookie cookie : request.getCookies()) {
+            if (properties.refreshCookieName().equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
     private ResponseCookie cookie(String value, Duration maxAge) {

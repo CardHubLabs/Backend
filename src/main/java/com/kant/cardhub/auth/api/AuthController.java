@@ -2,7 +2,6 @@ package com.kant.cardhub.auth.api;
 
 import com.kant.cardhub.auth.application.AuthSessionService;
 import com.kant.cardhub.auth.application.AuthTokens;
-import com.kant.cardhub.auth.config.AuthProperties;
 import com.kant.cardhub.common.api.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,16 +20,13 @@ public class AuthController {
 
     private final AuthSessionService authSessionService;
     private final AuthCookieService authCookieService;
-    private final AuthProperties properties;
 
     public AuthController(
             AuthSessionService authSessionService,
-            AuthCookieService authCookieService,
-            AuthProperties properties
+            AuthCookieService authCookieService
     ) {
         this.authSessionService = authSessionService;
         this.authCookieService = authCookieService;
-        this.properties = properties;
     }
 
     @GetMapping("/csrf")
@@ -48,7 +44,7 @@ public class AuthController {
             HttpServletResponse response
     ) {
         AuthTokens tokens = authSessionService.reissue(
-                refreshToken(request),
+                authCookieService.readRefreshToken(request),
                 request.getHeader("User-Agent"),
                 request.getRemoteAddr()
         );
@@ -61,20 +57,8 @@ public class AuthController {
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        authSessionService.logout(refreshToken(request));
+        authSessionService.logout(authCookieService.readRefreshToken(request));
         authCookieService.clear(response);
         return ResponseEntity.ok(ApiResponse.empty());
-    }
-
-    private String refreshToken(HttpServletRequest request) {
-        if (request.getCookies() == null) {
-            return null;
-        }
-        for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
-            if (properties.refreshCookieName().equals(cookie.getName())) {
-                return cookie.getValue();
-            }
-        }
-        return null;
     }
 }

@@ -12,6 +12,7 @@ import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 
@@ -60,6 +61,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(ErrorCode.FORBIDDEN.status()).body(ErrorResponse.of(
                 ErrorCode.FORBIDDEN,
                 ErrorCode.FORBIDDEN.defaultMessage(),
+                traceId(request)
+        ));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException exception, HttpServletRequest request) {
+        return ResponseEntity.status(ErrorCode.RESOURCE_NOT_FOUND.status()).body(ErrorResponse.of(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                ErrorCode.RESOURCE_NOT_FOUND.defaultMessage(),
                 traceId(request)
         ));
     }
