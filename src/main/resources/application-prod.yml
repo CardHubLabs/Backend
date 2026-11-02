@@ -4,3 +4,47 @@ spring:
     username: "${DB_USERNAME}"
     password: "${DB_PASSWORD}"
     driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+cardhub:
+  auth:
+    jwt-secret: "${JWT_SECRET}"
+    refresh-cookie-secure: true
+    oauth-success-url: "${OAUTH_SUCCESS_URL}"
+  cors:
+    allowed-origins: "${CORS_ALLOWED_ORIGINS}"
+  security:
+    cipher-provider: "${CIPHER_PROVIDER:kms}"
+    pii-key: "${PII_ENCRYPTION_KEY:}"
+    pii-key-version: "${PII_KEY_VERSION:kms-local-fallback-v1}"
+    kms-key-id: "${KMS_KEY_ID}"
+    kms-region: "${KMS_REGION:${AWS_REGION:ap-northeast-2}}"
+  storage:
+    provider: "${STORAGE_PROVIDER:s3}"
+    bucket: "${S3_BUCKET}"
+    region: "${AWS_REGION:ap-northeast-2}"
+    cloudfront-base-url: "${CLOUDFRONT_BASE_URL}"
+  payment:
+    provider: "${PAYMENT_PROVIDER:toss}"
+    base-url: "${TOSS_BASE_URL:https://api.tosspayments.com}"
+    secret-key: "${TOSS_SECRET_KEY}"
+    connect-timeout: "${TOSS_CONNECT_TIMEOUT:3s}"
+    read-timeout: "${TOSS_READ_TIMEOUT:7s}"
+  shipment:
+    provider: "${SHIPMENT_PROVIDER:sweettracker}"
+    base-url: "${SWEETTRACKER_BASE_URL:https://info.sweettracker.co.kr}"
+    api-key: "${SWEETTRACKER_API_KEY}"
+    connect-timeout: "${SWEETTRACKER_CONNECT_TIMEOUT:3s}"
+    read-timeout: "${SWEETTRACKER_READ_TIMEOUT:7s}"
+springdoc:
+  api-docs:
+    enabled: "${OPENAPI_ENABLED:false}"
+  swagger-ui:
+    enabled: "${OPENAPI_ENABLED:false}"
+server:
+  forward-headers-strategy: framework
+logging:
+  structured:
+    format:
+      console: logstash
