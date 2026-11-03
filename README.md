@@ -109,4 +109,5 @@ API prefix는 `/api/v1`입니다. 주요 경로는 `/auth`, `/users/me`, `/catal
 
 - [개발 현황과 검증 결과](https://github.com/CardHubLabs/Backend/blob/feat/google-oauth-integration/docs/development-status-2026-09-02.md)
 - [Google OAuth 인증 흐름과 로컬 설정](https://github.com/CardHubLabs/Backend/blob/feat/google-oauth-integration/docs/google-oauth-integration.md)
+- [카카오 OAuth 연동과 로컬 검증](docs/kakao-oauth-integration.md)
 - [배포·마이그레이션·장애 복구 runbook](https://github.com/CardHubLabs/Backend/blob/feat/google-oauth-integration/docs/runbook.md)
