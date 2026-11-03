@@ -54,8 +54,8 @@ public class OAuthUserProvisioningService {
                 Map<String, Object> profile = map(account.get("profile"));
                 yield new OAuthProfile(
                         string(attributes.get("id")),
-                        nullableString(account.get("email")),
-                        string(profile.get("nickname"), properties.get("nickname"), account.get("email"))
+                        null,
+                        firstNonBlank(profile.get("nickname"), properties.get("nickname"))
                 );
             }
             case NAVER -> {
@@ -74,12 +74,20 @@ public class OAuthUserProvisioningService {
     }
 
     private String string(Object... candidates) {
+        String value = firstNonBlank(candidates);
+        if (value != null) {
+            return value;
+        }
+        throw new IllegalArgumentException("OAuth provider did not return a required value");
+    }
+
+    private String firstNonBlank(Object... candidates) {
         for (Object candidate : candidates) {
             if (candidate != null && !candidate.toString().isBlank()) {
                 return candidate.toString();
             }
         }
-        throw new IllegalArgumentException("OAuth provider did not return a required subject");
+        return null;
     }
 
     private String nullableString(Object value) {

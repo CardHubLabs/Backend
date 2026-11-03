@@ -38,6 +38,7 @@ public class SecurityConfiguration {
             HttpSecurity http,
             ObjectProvider<ClientRegistrationRepository> clientRegistrations,
             OAuthLoginSuccessHandler successHandler,
+            OAuthLoginFailureHandler failureHandler,
             AuthProperties authProperties,
             ActiveUserFilter activeUserFilter
     ) throws Exception {
@@ -100,7 +101,7 @@ public class SecurityConfiguration {
                 .addFilterAfter(activeUserFilter, BearerTokenAuthenticationFilter.class);
 
         if (clientRegistrations.getIfAvailable() != null) {
-            http.oauth2Login(oauth -> oauth.successHandler(successHandler));
+            http.oauth2Login(oauth -> oauth.successHandler(successHandler).failureHandler(failureHandler));
         }
         return http.build();
     }
